@@ -70,7 +70,7 @@ class BudgetGuard:
         if not run_id:
             return 0.0, 0
         row = self.conn.execute(
-            "SELECT COALESCE(SUM(est_cost_usd), 0) AS s, COALESCE(SUM(tokens_in + tokens_out), 0) AS t "
+            "SELECT COALESCE(SUM(est_cost_usd), 0) AS s, COALESCE(SUM(tokens_in - tokens_cached + tokens_out), 0) AS t "
             "FROM calls WHERE replayed = 0 AND run_id = ?",
             (run_id,),
         ).fetchone()

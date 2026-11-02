@@ -26,8 +26,11 @@ from vision.sam import (  # noqa: E402
     parse_sam_boxes,
     sort_top_to_bottom,
 )
-from vision.video import laplacian_sharpness, select_sharpest_frame  # noqa: E402
-from vision.video import sample_video_frames  # noqa: E402
+from vision.video import (  # noqa: E402
+    laplacian_sharpness,
+    sample_video_frames,  # noqa: E402
+    select_sharpest_frame,
+)
 
 W, H = 400, 800
 

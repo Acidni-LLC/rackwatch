@@ -17,3 +17,6 @@ Where DESIGN.md was ambiguous, or a live finding changed it. The build instructi
 | D-011 | Secret scanning uses `detect-secrets` plus an exact-value check against the local `.env`, instead of gitleaks. | §17 allows either. This needs no system install and also catches the real key in any file. |
 | D-012 | `AGENTS.md` points Muse Code at MUSE_CODE.md. | Muse Code reads `AGENTS.md` first, and the build instructions weren't addressed to it. |
 | D-013 | `make` targets wrap `scripts/rw.py`, which also runs directly on Windows. | The README promises `make replay`. Windows dev machines may not have make. |
+| D-014 | `MAX_TOKENS_PER_RUN` counts fresh tokens (uncached input plus output), not all input. | Each turn re-sends the conversation, so cumulative input with cache hits passes 600k at about $0.45, a third of the $1.50 run cap. The dollar cap is the real limit. |
+| D-015 | The last turn of an attempt forces `tool_choice: submit_incidents`. | Otherwise a rushed attempt can time out without ever reaching the verifier, which hides the failure the design wants to show. |
+| D-016 | High-effort turns get `max_output_tokens` 12,000 instead of §14's 4,000. | Reasoning tokens count toward the limit, so 4,000 risks truncating a planning turn. Low-effort turns keep 4,000. |

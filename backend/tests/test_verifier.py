@@ -377,3 +377,11 @@ def test_grouping_metrics_shape():
     assert merged.recall == 1.0 and merged.precision < 1.0 and merged.f1 < 1.0
     split = grouping_metrics({"a": "1", "b": "2", "c": "3", "d": "4"}, truth)
     assert split.recall == 0.0
+
+
+def test_empty_incident_gets_a_plain_message(check):
+    data = good_submission()
+    data["incidents"][0]["alert_ids"] = []
+    result = check(data)
+    assert "INC-1 has no alert_ids" in " ".join(c.detail for c in failures(result, "R5_coverage"))
+    assert "does not fit the evidence" not in result.feedback_for_agent

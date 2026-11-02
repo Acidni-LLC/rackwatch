@@ -323,3 +323,27 @@ def test_key_never_reaches_logs_or_events(world):
     for table in ("calls", "events", "tool_calls", "runs", "verifier_results"):
         dump = json.dumps([dict(r) for r in world.conn.execute(f"SELECT * FROM {table}")])
         assert fake_key not in dump, table
+
+
+def test_last_turn_forces_a_submission(world):
+    lookup = lambda request, purpose: fake_tool_call("cmdb_lookup", {"query": "FW-01"})  # noqa: E731
+    client = FakeMetaClient(responder=lookup, settings=world.settings, conn=world.conn, run_id="run_a")
+    run_triage(world.conn, client, world.settings, max_turns=3, max_attempts=1)
+    assert "tool_choice" not in client.requests[0]
+    assert client.requests[2]["tool_choice"] == {"type": "function", "name": "submit_incidents"}
+
+
+def test_demo_strict_first_attempt_is_low_effort_with_a_small_cap(world):
+    bad = submission(fix="FIX-FACTORY-RESET")
+    script = [fake_tool_call("cmdb_lookup", {"query": "FW-01"}) for _ in range(5)]
+    script += [
+        fake_tool_call("submit_incidents", bad),
+        investigate(),
+        drafts(),
+        fake_tool_call("submit_incidents", submission(), call_id="c9"),
+    ]
+    client = client_for(world, script)
+    result = run_triage(world.conn, client, world.settings, demo_strict=True)
+    assert result.status == "passed" and result.attempts == 2
+    assert all(r["reasoning"] == {"effort": "low"} for r in client.requests[:6])
+    assert client.requests[6]["reasoning"] == {"effort": "high"}

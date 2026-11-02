@@ -223,3 +223,18 @@ def test_replay_mode_needs_no_key(tmp_path, monkeypatch):
         replay_speed=0,
     )
     assert client.responses(purpose="p", model="m", input="x").output_text == "x"
+
+
+def test_token_cap_ignores_cached_tokens():
+    usage = {"input_tokens": 500_000, "output_tokens": 0, "input_tokens_details": {"cached_tokens": 450_000}}
+    client = FakeMetaClient(
+        script=[fake_text("a", usage=usage), fake_text("b", usage=usage), fake_text("c")],
+        settings=settings(max_tokens_per_run=120_000, budget_per_run=99),
+    )
+    client.responses(purpose="t", model="muse-spark-1.3", input="one")
+    client.responses(purpose="t", model="muse-spark-1.3", input="two")  # 100k fresh so far, under the cap
+    client.responses(purpose="t", model="muse-spark-1.3", input="three")
+    with pytest.raises(BudgetExceeded):
+        client.fake.script.append(fake_text("d"))
+        client.budget.settings = settings(max_tokens_per_run=100_000, budget_per_run=99)
+        client.responses(purpose="t", model="muse-spark-1.3", input="four")

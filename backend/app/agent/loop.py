@@ -281,6 +281,12 @@ def run_triage(
                 if turn == turn_cap:
                     messages.append({"role": "user", "content": prompts.LAST_TURN_NUDGE})
                 effort = router.pick_effort(turn, ctx.drafted, strict_now)
+                # The last turn must submit, so a rushed plan reaches the verifier rather than timing out unseen.
+                forced = (
+                    {"tool_choice": {"type": "function", "name": "submit_incidents"}}
+                    if turn == turn_cap
+                    else {}
+                )
                 response = client.responses(
                     purpose=router.purpose_for(effort, attempt),
                     model=settings.spark_model,
@@ -291,6 +297,7 @@ def run_triage(
                     max_output_tokens=MAX_OUTPUT[effort],
                     store=False,
                     include=["reasoning.encrypted_content"],
+                    **forced,
                 )
                 messages = messages + response.output
                 _emit_reasoning(conn, run_id, attempt, turn, response.output)

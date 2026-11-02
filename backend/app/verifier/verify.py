@@ -269,6 +269,16 @@ def _r5(sub: Submission, inp: VerifierInputs) -> tuple[list[Check], int]:
     unknown = sorted(a for a in seen if a not in inp.alerts)
     duplicates = sorted(a for a, n in seen.items() if n > 1 and a in inp.alerts)
     unassigned = sorted(a for a in inp.alerts if a not in seen)
+    for inc in sub.incidents:
+        if not inc.alert_ids:
+            out.append(
+                Check(
+                    rule=RULES[4],
+                    passed=False,
+                    detail=f"{inc.id} has no alert_ids; list its alerts or selectors",
+                    incident_id=inc.id,
+                )
+            )
     if unassigned:
         out.append(
             Check(
@@ -336,6 +346,8 @@ def _r6(sub: Submission, inp: VerifierInputs) -> tuple[list[Check], Grouping]:
 
     for i, inc in enumerate(sub.incidents):
         p = pred_sets[i]
+        if not p:  # R5 already says it is empty; there is nothing here to compare
+            continue
         mixed = [true_sets[j] & p for j in range(len(true_sets)) if true_sets[j] & p]
         noise_in = p & set(truth.noise_alert_ids)
         if len(mixed) > 1:
