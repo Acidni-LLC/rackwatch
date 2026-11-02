@@ -12,6 +12,7 @@ MSPs (managed service providers) run IT for dozens of small clients with a few t
 | Model | Used for |
 |---|---|
 | `muse-spark-1.3` | Triage agent with tools, label reading, device grounding, effort routing, voice note work logs |
+| Muse Spark Open | Meta's open-weight model, served by Baseten: the same triage agent, tools and verifier, as a choice next to `muse-spark-1.3` |
 | `sam-3.1` | SAM (Segment Anything Model): segmenting each rack device, with concept and box prompts |
 | `muse-voice-transcribe-1.0` | Tech voice notes, biased with keywords from the CMDB |
 | Muse Code | Coding agent that wrote the vision pipeline and data generator ([session log](docs/muse-code-log.md)) |
@@ -38,6 +39,10 @@ Add your `MODEL_API_KEY` to `.env`, then:
 python3 scripts/rw.py dev
 ```
 Live voice notes also need `ffmpeg`. A live triage costs about $0.30.
+
+**On open weights**
+
+Add `BASETEN_API_KEY` to `.env` and click **Live on open weights**, or run `python3 scripts/run_triage.py --engine open`. No key is needed for **Replay on open weights**. Setting `OPEN_PROVIDER=fireworks` with `FIREWORKS_API_KEY` uses Fireworks instead, which has passed tests with fakes but has not been run live.
 
 ## How it works
 See [docs/architecture.md](docs/architecture.md) for the diagram.
@@ -71,21 +76,24 @@ The agent can't edit it, configure it, or call it except through `submit_inciden
 Deterministic regexes catch email, phone, MAC (media access control) addresses, card-like and SSN-like (Social Security number) numbers, IP (Internet Protocol) addresses outside lab ranges, `user <name>` and `Hi <Name>` patterns, plus the names in the PSA (professional services automation) contact list. `meta_client` scans every outgoing request and refuses the call if anything still matches. Client emails are de-tokenized locally, after approval. The token map never leaves the machine.
 
 ## Results
-Measured on Nov 2, 2026 on the seeded dataset (seed 42), live against the Meta Model API. Raw numbers are in [docs/eval.json](docs/eval.json).
+Measured on Nov 2, 2026 on the seeded dataset (seed 42), live. Raw numbers are in [docs/eval.json](docs/eval.json).
 
-**Triage, 5 runs**
-| | |
-|---|---|
-| Passed the verifier | 5 of 5 |
-| Passed on the first attempt | 2 of 5 (mean 1.8 attempts) |
-| Grouping F1 (the harmonic mean of pairwise precision and recall) | 0.996 mean (0.99 to 1.0) |
-| Time | 58 s mean, 74 s worst |
-| Estimated cost | $0.30 mean, $0.32 worst |
+**Triage, 5 runs on each engine**
+| | Muse Spark 1.3 (Meta API) | Muse Spark Open (Baseten) | Mixed |
+|---|---|---|---|
+| Passed the verifier | 5 of 5 | 5 of 5 | 5 of 5 |
+| Passed on the first attempt | 2 of 5 | 1 of 5 | 1 of 5 |
+| Mean attempts | 1.8 | 2.0 | 1.8 |
+| Grouping F1 (the harmonic mean of pairwise precision and recall), mean | 0.996 | 0.996 | 1.0 |
+| Time, mean (worst) | 58 s (74 s) | 38 s (51 s) | 138 s (152 s) |
+| Estimated cost, mean (worst) | $0.30 ($0.32) | $0.18 ($0.27) | $0.37 ($0.52) |
+
+The verifier didn't care which model answered: Meta's open-weight model passed it every time, and took less time and money doing it. Five runs is too few to rank the engines on quality, so read the first-attempt row as noise until there are more. Mixed sends low-effort tool turns to Muse Spark Open and everything else to Muse Spark 1.3. We expected it to be the cheapest, and it was the slowest and the most expensive: 70 of its 86 turns ran at high effort, so they stayed on the hosted model, and Baseten handled only 16. Don't use it.
 
 **Rack scan, 5 runs of the sample image**
 VISION_RESULTS
 
-Costs are estimates from published Model API prices and the usage each response reports.
+Costs are estimates from published prices and the usage each response reports. Meta and Baseten publish the same token prices for these models, so the cost difference comes from using fewer tokens, not from a cheaper rate.
 
 **Limits.** The dataset is synthetic, with three incidents and a known answer, so these numbers show the system works on this scenario and don't predict a real NOC (network operations center). The sample rack is a generated image with clean stickers, and a real closet photo will be harder. Reading a model number partly hidden behind cables is unreliable, and the table flags low-confidence cells.
 

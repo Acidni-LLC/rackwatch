@@ -91,6 +91,16 @@ def run_replay(api) -> str:
     return run_id
 
 
+def test_an_unknown_engine_is_refused(api):
+    assert api.post("/api/triage", json={"engine": "turbo"}).status_code == 422
+
+
+def test_open_weights_replay_needs_its_recording(api):
+    response = api.post("/api/triage", json={"replay": True, "engine": "open"})
+    assert response.status_code == 409
+    assert main.OPEN_CASSETTE in response.json()["detail"]
+
+
 def test_status_reports_replay_with_no_key(api):
     status = api.get("/api/status").json()
     assert status["mode"] == "replay"

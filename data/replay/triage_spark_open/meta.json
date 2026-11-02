@@ -1,0 +1,27 @@
+{
+  "kind": "triage",
+  "strict": false,
+  "recorded_at": "2026-11-02T17:45:27-0500",
+  "engine": "open",
+  "run_id": "run_2b741544b1",
+  "status": "passed",
+  "attempts": 2,
+  "seconds": 50.1,
+  "incidents": [
+    "INC-NAS-01",
+    "INC-FW-01",
+    "INC-SW-02"
+  ],
+  "cost_usd": 0.2054,
+  "tokens_in": 407329,
+  "tokens_cached": 315008,
+  "tokens_out": 10047,
+  "grouping": {
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1": 1.0,
+    "ari": 1.0,
+    "unassigned_alerts": 0
+  },
+  "error": null
+}

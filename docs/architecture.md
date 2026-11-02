@@ -47,6 +47,8 @@ flowchart LR
 
 `FakeMetaClient` subclasses `MetaClient` and swaps only the transport, so tests exercise the same guards.
 
+The triage agent can run on either of Meta's models: `muse-spark-1.3` on `api.meta.ai`, or Muse Spark Open, Meta's open-weight model, through an inference partner. Baseten is the default partner, and `OPEN_PROVIDER=fireworks` switches to Fireworks. `MetaClient` picks the endpoint from the model name, so all four steps above apply to both, and the call log records which endpoint served each call. The rack scan and voice notes stay on the Meta API, because SAM and Voice Transcribe are served there.
+
 ## Context strategy
 
 The first message is a digest (counts by type, device and five-minute bucket, plus the top 50 distinct messages), not 512 alerts. The data sits behind tools. Spark's 1M context is a safety net here, not the plan. Prompt caching does the rest: the system prompt and tool block stay first, and prior turns replay unchanged, so the prefix keeps hitting the cache.

@@ -200,5 +200,279 @@
         "cost_usd": 0.1238
       }
     ]
+  },
+  "open": {
+    "kind": "open",
+    "engine": "open",
+    "date": "2026-11-02",
+    "dataset": "seed 42, 512 alerts",
+    "n": 5,
+    "passed": 5,
+    "first_try": 1,
+    "mean_attempts": 2,
+    "f1_mean": 0.996,
+    "cost_mean_usd": 0.1833,
+    "cost_max_usd": 0.2675,
+    "seconds_mean": 38.1,
+    "seconds_max": 51.4,
+    "runs": [
+      {
+        "engine": "open",
+        "run_id": "run_2625a90ac9",
+        "status": "passed",
+        "attempts": 2,
+        "seconds": 45.1,
+        "incidents": [
+          "INC-NAS-01",
+          "INC-FW-01",
+          "INC-SW-01"
+        ],
+        "cost_usd": 0.2116,
+        "tokens_in": 353468,
+        "tokens_cached": 254720,
+        "tokens_out": 11755,
+        "grouping": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "ari": 1.0,
+          "unassigned_alerts": 0
+        },
+        "error": null
+      },
+      {
+        "engine": "open",
+        "run_id": "run_8a42a5a14f",
+        "status": "passed",
+        "attempts": 2,
+        "seconds": 30.2,
+        "incidents": [
+          "INC-NAS-01",
+          "INC-FW-01",
+          "INC-SW-ACC-02"
+        ],
+        "cost_usd": 0.1464,
+        "tokens_in": 265978,
+        "tokens_cached": 200960,
+        "tokens_out": 8236,
+        "grouping": {
+          "precision": 0.9803,
+          "recall": 1.0,
+          "f1": 0.9901,
+          "ari": 0.9884,
+          "unassigned_alerts": 0
+        },
+        "error": null
+      },
+      {
+        "engine": "open",
+        "run_id": "run_27253a9066",
+        "status": "passed",
+        "attempts": 3,
+        "seconds": 51.4,
+        "incidents": [
+          "INC-NAS",
+          "INC-VPN",
+          "INC-NET"
+        ],
+        "cost_usd": 0.2675,
+        "tokens_in": 467312,
+        "tokens_cached": 343552,
+        "tokens_out": 14410,
+        "grouping": {
+          "precision": 0.9803,
+          "recall": 1.0,
+          "f1": 0.9901,
+          "ari": 0.9884,
+          "unassigned_alerts": 0
+        },
+        "error": null
+      },
+      {
+        "engine": "open",
+        "run_id": "run_7d25bc52d7",
+        "status": "passed",
+        "attempts": 1,
+        "seconds": 27.1,
+        "incidents": [
+          "INC-VPN",
+          "INC-NAS",
+          "INC-SWITCH"
+        ],
+        "cost_usd": 0.1597,
+        "tokens_in": 299436,
+        "tokens_cached": 219648,
+        "tokens_out": 6349,
+        "grouping": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "ari": 1.0,
+          "unassigned_alerts": 0
+        },
+        "error": null
+      },
+      {
+        "engine": "open",
+        "run_id": "run_222628aeb5",
+        "status": "passed",
+        "attempts": 2,
+        "seconds": 36.9,
+        "incidents": [
+          "INC-NAS-01",
+          "INC-VPN-01",
+          "INC-NET-01"
+        ],
+        "cost_usd": 0.1313,
+        "tokens_in": 229189,
+        "tokens_cached": 176896,
+        "tokens_out": 9280,
+        "grouping": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "ari": 1.0,
+          "unassigned_alerts": 0
+        },
+        "error": null
+      }
+    ]
+  },
+  "mixed": {
+    "kind": "mixed",
+    "engine": "mixed",
+    "date": "2026-11-02",
+    "dataset": "seed 42, 512 alerts",
+    "n": 5,
+    "passed": 5,
+    "first_try": 1,
+    "mean_attempts": 1.8,
+    "f1_mean": 1.0,
+    "cost_mean_usd": 0.3734,
+    "cost_max_usd": 0.5169,
+    "seconds_mean": 138.1,
+    "seconds_max": 151.6,
+    "runs": [
+      {
+        "engine": "mixed",
+        "run_id": "run_357011f4ed",
+        "status": "passed",
+        "attempts": 2,
+        "seconds": 151.6,
+        "incidents": [
+          "INC-NAS",
+          "INC-VPN",
+          "INC-NET"
+        ],
+        "cost_usd": 0.3176,
+        "tokens_in": 613256,
+        "tokens_cached": 461644,
+        "tokens_out": 13852,
+        "grouping": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "ari": 1.0,
+          "unassigned_alerts": 0
+        },
+        "error": null
+      },
+      {
+        "engine": "mixed",
+        "run_id": "run_5a1ce3819f",
+        "status": "passed",
+        "attempts": 2,
+        "seconds": 127.7,
+        "incidents": [
+          "INC-1",
+          "INC-2",
+          "INC-3"
+        ],
+        "cost_usd": 0.5169,
+        "tokens_in": 836785,
+        "tokens_cached": 527323,
+        "tokens_out": 12002,
+        "grouping": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "ari": 1.0,
+          "unassigned_alerts": 0
+        },
+        "error": null
+      },
+      {
+        "engine": "mixed",
+        "run_id": "run_f68888f360",
+        "status": "passed",
+        "attempts": 2,
+        "seconds": 135.3,
+        "incidents": [
+          "INC-NAS",
+          "INC-VPN",
+          "INC-SW"
+        ],
+        "cost_usd": 0.3625,
+        "tokens_in": 424994,
+        "tokens_cached": 210410,
+        "tokens_out": 14766,
+        "grouping": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "ari": 1.0,
+          "unassigned_alerts": 0
+        },
+        "error": null
+      },
+      {
+        "engine": "mixed",
+        "run_id": "run_0dbd55a43a",
+        "status": "passed",
+        "attempts": 1,
+        "seconds": 144.9,
+        "incidents": [
+          "INC-NAS",
+          "INC-FW",
+          "INC-NET"
+        ],
+        "cost_usd": 0.3054,
+        "tokens_in": 384050,
+        "tokens_cached": 219325,
+        "tokens_out": 15676,
+        "grouping": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "ari": 1.0,
+          "unassigned_alerts": 0
+        },
+        "error": null
+      },
+      {
+        "engine": "mixed",
+        "run_id": "run_e10265f1b5",
+        "status": "passed",
+        "attempts": 2,
+        "seconds": 130.8,
+        "incidents": [
+          "INC-NAS",
+          "INC-VPN",
+          "INC-SW"
+        ],
+        "cost_usd": 0.3646,
+        "tokens_in": 625127,
+        "tokens_cached": 429953,
+        "tokens_out": 13216,
+        "grouping": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "ari": 1.0,
+          "unassigned_alerts": 0
+        },
+        "error": null
+      }
+    ]
   }
 }

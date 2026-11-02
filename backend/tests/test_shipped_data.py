@@ -13,7 +13,7 @@ from app.meta_client import MetaClient
 from app.replay import cassette_meta
 from app.store import load_contacts, load_dataset
 
-CASSETTES = ["triage_pass_after_replan", "vision_sample_rack", "voice_note"]
+CASSETTES = ["triage_pass_after_replan", "triage_spark_open", "vision_sample_rack", "voice_note"]
 
 
 def _text(name: str) -> str:
@@ -37,16 +37,19 @@ def test_cassettes_hold_no_contact_data_or_encrypted_reasoning(name):
                 assert value not in text, value
 
 
-def test_shipped_triage_cassette_really_replans():
+@pytest.mark.parametrize("name", ["triage_pass_after_replan", "triage_spark_open"])
+def test_shipped_triage_cassettes_really_replan(name):
     """The demo's rejection has to be real: replay it, with real tools and a real verifier, and it must fail then pass."""
     settings = Settings(api_key="", mode="replay", generated_dir=GENERATED_DIR, replay_dir=REPLAY_DIR)
     conn = dbmod.connect(":memory:")
     load_dataset(conn, GENERATED_DIR)
     run_id = new_run_id()
-    start_run(conn, run_id, "triage", "replay", CASSETTES[0])
-    client = MetaClient(settings=settings, conn=conn, run_id=run_id, cassette=CASSETTES[0], replay_speed=0)
-    strict = bool(cassette_meta(REPLAY_DIR, CASSETTES[0]).get("strict"))
-    result = run_triage(conn, client, settings, run_id=run_id, demo_strict=strict)
+    start_run(conn, run_id, "triage", "replay", name)
+    client = MetaClient(settings=settings, conn=conn, run_id=run_id, cassette=name, replay_speed=0)
+    meta = cassette_meta(REPLAY_DIR, name)
+    result = run_triage(
+        conn, client, settings, run_id=run_id, demo_strict=bool(meta.get("strict")), engine=meta.get("engine", "hosted")
+    )
 
     assert result.status == "passed", result.error
     assert result.attempts == 2
@@ -59,6 +62,9 @@ def test_shipped_triage_cassette_really_replans():
     calls = conn.execute("SELECT diverged, replayed FROM calls WHERE run_id = ?", (run_id,)).fetchall()
     assert calls and all(c["replayed"] for c in calls)
     assert not any(c["diverged"] for c in calls), "the shipped data no longer matches the cassette"
+    if meta.get("engine") == "open":
+        models = {r["model"] for r in conn.execute("SELECT model FROM calls WHERE run_id = ?", (run_id,))}
+        assert models == {settings.spark_open_model}
 
 
 def test_generated_ground_truth_is_consistent():
