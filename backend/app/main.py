@@ -27,7 +27,7 @@ from .config import DATA_DIR, REPO_ROOT, UPLOADS_DIR, Settings, get_settings
 from .events import emit, events_after, now_iso
 from .meta_client import MetaClient
 from .pii import PiiScrubber
-from .replay import cassette_path
+from .replay import cassette_meta, cassette_path
 
 TRIAGE_CASSETTE = "triage_pass_after_replan"
 VOICE_CASSETTE = "voice_note"
@@ -287,6 +287,8 @@ def _triage_worker(run_id: str, replay: bool, speed: float, demo_strict: bool) -
     s = settings()
     try:
         client = _client_for_run(s, c, run_id, replay, TRIAGE_CASSETTE, speed)
+        if replay:
+            demo_strict = bool(cassette_meta(s.replay_dir, TRIAGE_CASSETTE).get("strict"))
         run_triage(c, client, s, run_id=run_id, demo_strict=demo_strict)
     except Exception as error:
         emit(c, run_id, "run_error", {"message": f"{type(error).__name__}: {error}"})

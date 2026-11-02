@@ -99,7 +99,10 @@ export default function Incidents({ status, runId }: { status: Status | null; ru
               <span className="text-alarm">The run stopped.</span>
             )}
           </div>
-          <span className="font-mono text-[12.5px] text-dim">{elapsed(run.startedAt, run.finishedAt, now)} elapsed</span>
+          <span className="font-mono text-[12.5px] text-dim">
+            {elapsed(run.startedAt, run.finishedAt, now)} elapsed
+            {run.mode === "replay" ? " · replay of a recorded run, with the tools and verifier running for real" : ""}
+          </span>
         </div>
         <div className="ml-auto flex items-center gap-2">
           {!running && incidentCount ? <Btn onClick={() => go(`/metrics/${activeId}`)}>Metrics</Btn> : null}

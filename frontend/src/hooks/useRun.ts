@@ -20,6 +20,7 @@ export interface TurnEvent {
 export interface RunState {
   runId: string | null;
   status: string;
+  mode: string | null;
   attempt: number;
   turnCap: number;
   turns: TurnEvent[];
@@ -39,6 +40,7 @@ export interface RunState {
 const initial = (runId: string | null): RunState => ({
   runId,
   status: runId ? "running" : "idle",
+  mode: null,
   attempt: 0,
   turnCap: 24,
   turns: [],
@@ -67,6 +69,7 @@ function reducer(state: RunState, action: Action): RunState {
   switch (type) {
     case "run_started":
       next.startedAt = at;
+      next.mode = data.mode;
       break;
     case "attempt":
       next.attempt = data.attempt;

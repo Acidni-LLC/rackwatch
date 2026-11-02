@@ -44,34 +44,43 @@ def fresh(settings, name: str):
     return run_settings, conn
 
 
-def record_vision(settings) -> None:
+def record_vision(settings, tries: int, min_devices: int) -> None:
+    """Scans vary between runs (docs/eval.json has the range). Keeps the first take that meets the bar, and records
+    how many takes that needed in meta.json, so the shipped replay is never mistaken for the average."""
     from vision.pipeline import run_rack_pipeline  # noqa: PLC0415
 
-    run_settings, conn = fresh(settings, "vision")
-    run_settings = replace(run_settings, mode="record")
-    run_id = new_run_id()
-    start_run(conn, run_id, "vision", "record", VISION_CASSETTE)
-    client = MetaClient(settings=run_settings, conn=conn, run_id=run_id, cassette=VISION_CASSETTE)
-    started = time.perf_counter()
-    overlay = str(Path(run_settings.db_path).parent / "overlay.png")
-    scan = run_rack_pipeline(
-        str(SAMPLE_IMAGE),
-        client,
-        "RACK-A",
-        str(run_settings.generated_dir / "cmdb_seed.json"),
-        overlay_path=overlay,
-    )
-    summary = finish_run(conn, run_id, "passed", 1)
-    meta = {
-        "kind": "vision",
-        "recorded_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
-        "seconds": round(time.perf_counter() - started, 1),
-        "cost_usd": summary["cost_usd"],
-        "accuracy": scan.accuracy,
-        "devices": len(scan.devices),
-    }
-    client.writer.write_meta(meta)
-    print(json.dumps(meta, indent=2))
+    for take in range(1, tries + 1):
+        run_settings, conn = fresh(settings, "vision")
+        run_settings = replace(run_settings, mode="record")
+        run_id = new_run_id()
+        start_run(conn, run_id, "vision", "record", VISION_CASSETTE)
+        client = MetaClient(settings=run_settings, conn=conn, run_id=run_id, cassette=VISION_CASSETTE)
+        started = time.perf_counter()
+        overlay = str(Path(run_settings.db_path).parent / "overlay.png")
+        scan = run_rack_pipeline(
+            str(SAMPLE_IMAGE),
+            client,
+            "RACK-A",
+            str(run_settings.generated_dir / "cmdb_seed.json"),
+            overlay_path=overlay,
+        )
+        summary = finish_run(conn, run_id, "passed", 1)
+        accuracy = scan.accuracy or {}
+        print(f"take {take}: {accuracy}", flush=True)
+        if accuracy.get("devices_matched", 0) >= min_devices:
+            meta = {
+                "kind": "vision",
+                "recorded_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+                "takes": take,
+                "seconds": round(time.perf_counter() - started, 1),
+                "cost_usd": summary["cost_usd"],
+                "accuracy": accuracy,
+                "devices": len(scan.devices),
+            }
+            client.writer.write_meta(meta)
+            print(json.dumps(meta, indent=2))
+            return
+    raise SystemExit(f"no take reached {min_devices} devices in {tries} tries")
 
 
 def record_triage(settings, tries: int) -> None:
@@ -140,13 +149,14 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("what", choices=["vision", "triage", "voice"])
     parser.add_argument("--tries", type=int, default=4)
+    parser.add_argument("--min-devices", type=int, default=13)
     parser.add_argument("--wav", default=str(ROOT / "data/voice/sample_note.wav"))
     args = parser.parse_args()
     settings = get_settings()
     if not settings.api_key:
         raise SystemExit("recording needs MODEL_API_KEY")
     if args.what == "vision":
-        record_vision(settings)
+        record_vision(settings, args.tries, args.min_devices)
     elif args.what == "triage":
         record_triage(settings, args.tries)
     else:

@@ -21,5 +21,6 @@
     "ari": 1.0,
     "unassigned_alerts": 0
   },
-  "error": null
+  "error": null,
+  "strict": true
 }

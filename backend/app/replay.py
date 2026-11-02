@@ -60,6 +60,12 @@ def cassette_path(replay_dir: Path, name: str) -> Path:
     return Path(replay_dir) / name / "cassette.jsonl"
 
 
+def cassette_meta(replay_dir: Path, name: str) -> dict:
+    """How a cassette was recorded. A replay has to run the same way, or its calls will not line up."""
+    path = Path(replay_dir) / name / "meta.json"
+    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+
+
 class CassetteWriter:
     """Writes one cassette. Starting a recording replaces any earlier take of the same name."""
 

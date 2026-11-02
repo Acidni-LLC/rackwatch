@@ -23,11 +23,14 @@ from app.agent.loop import new_run_id, run_triage, start_run  # noqa: E402
 from app.config import get_settings  # noqa: E402
 from app.meta_client import MetaClient  # noqa: E402
 from app.metrics import run_metrics  # noqa: E402
+from app.replay import cassette_meta  # noqa: E402
 from app.store import load_dataset  # noqa: E402
 
 
 def run_once(conn, settings, record: str | None, replay: str | None, strict: bool, speed: float) -> dict:
     run_settings = replace(settings, mode="record" if record else "replay" if replay else "live")
+    if replay:
+        strict = bool(cassette_meta(settings.replay_dir, replay).get("strict"))
     run_id = new_run_id()
     cassette = record or replay
     start_run(conn, run_id, "triage", run_settings.mode, cassette)
@@ -53,7 +56,12 @@ def run_once(conn, settings, record: str | None, replay: str | None, strict: boo
     }
     if client.writer is not None:
         client.writer.write_meta(
-            {"kind": "triage", "recorded_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"), **summary}
+            {
+                "kind": "triage",
+                "strict": strict,
+                "recorded_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+                **summary,
+            }
         )
     return summary
 

@@ -1,0 +1,23 @@
+{
+  "kind": "vision",
+  "recorded_at": "2026-11-02T15:16:35-0500",
+  "seconds": 186.1,
+  "cost_usd": 0.185721,
+  "accuracy": {
+    "devices_matched": 11,
+    "devices_total": 14,
+    "serial_matched": 9,
+    "u_matched": 11,
+    "extra_devices": [
+      "dev_A_07",
+      "dev_A_09",
+      "dev_A_19"
+    ],
+    "missing_devices": [
+      "dev_A_06",
+      "dev_A_08",
+      "dev_A_20"
+    ]
+  },
+  "devices": 14
+}

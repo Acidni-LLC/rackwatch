@@ -121,6 +121,20 @@ export function TileField({
 
   const passed = verdict?.passed;
 
+  // Movement means one thing: the agent sorted the alerts. Measuring the field or resizing the window is instant.
+  const signature = (incidents ?? []).map((i) => `${i.id}:${i.alert_ids.length}`).join("|");
+  const [moving, setMoving] = useState(false);
+  const previous = useRef("");
+  useEffect(() => {
+    if (signature === previous.current) return;
+    const firstPaint = previous.current === "" && box.width === 0;
+    previous.current = signature;
+    if (firstPaint || !signature) return;
+    setMoving(true);
+    const timer = setTimeout(() => setMoving(false), 1800);
+    return () => clearTimeout(timer);
+  }, [signature, box.width]);
+
   return (
     <div ref={ref} className="relative h-full w-full" onMouseLeave={() => onHover?.(null)}>
       {bins.map((bin) =>
@@ -167,7 +181,7 @@ export function TileField({
         return (
           <div
             key={alert.id}
-            className={`tile ${tone}`}
+            className={`tile ${tone} ${moving ? "is-moving" : ""}`}
             onMouseEnter={() => onHover?.(alert)}
             style={{
               width: tile,

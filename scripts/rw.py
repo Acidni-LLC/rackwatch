@@ -57,7 +57,9 @@ def serve(replay: bool) -> None:
 
 def test() -> None:
     run([python(), "-m", "pytest"])
-    run([python(), "-m", "ruff", "check", "backend", "scripts", "datagen"])
+    run(
+        [python(), "-m", "ruff", "check", "backend", "scripts", "datagen"]
+    )  # check only: never --fix or format Muse Code's paths
     run([python(), "scripts/secret_scan.py"])
 
 

@@ -1,0 +1,8 @@
+{
+  "kind": "voice",
+  "recorded_at": "2026-11-02T15:18:21-0500",
+  "incident": "INC-SW",
+  "cost_usd": 0.002993,
+  "transcript": "I'm on site at the Acme dental closet. The SFP on SWACC02 in rack A, U12, has been reset and the switch is power cycled.",
+  "work_log_line": "Reset SFP on SWACC02 in rack A, U12 at Acme dental closet and power cycled switch."
+}
