@@ -1,0 +1,133 @@
+{
+  "normal": {
+    "kind": "normal",
+    "date": "2026-11-02",
+    "dataset": "seed 42, 512 alerts",
+    "n": 5,
+    "passed": 5,
+    "first_try": 2,
+    "mean_attempts": 1.8,
+    "f1_mean": 0.996,
+    "cost_mean_usd": 0.296,
+    "cost_max_usd": 0.3161,
+    "seconds_mean": 57.6,
+    "seconds_max": 74.2,
+    "runs": [
+      {
+        "run_id": "run_57af81144e",
+        "status": "passed",
+        "attempts": 3,
+        "seconds": 74.2,
+        "incidents": [
+          "INC-NAS",
+          "INC-FW",
+          "INC-SW"
+        ],
+        "cost_usd": 0.3161,
+        "tokens_in": 318580,
+        "tokens_cached": 142397,
+        "tokens_out": 17543,
+        "grouping": {
+          "precision": 0.9803,
+          "recall": 1.0,
+          "f1": 0.9901,
+          "ari": 0.9884,
+          "unassigned_alerts": 0
+        },
+        "error": null
+      },
+      {
+        "run_id": "run_579130323f",
+        "status": "passed",
+        "attempts": 2,
+        "seconds": 60.6,
+        "incidents": [
+          "INC-NAS-FULL",
+          "INC-FW-CERT",
+          "INC-SW-UPLINK"
+        ],
+        "cost_usd": 0.3093,
+        "tokens_in": 435687,
+        "tokens_cached": 258734,
+        "tokens_out": 11591,
+        "grouping": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "ari": 1.0,
+          "unassigned_alerts": 0
+        },
+        "error": null
+      },
+      {
+        "run_id": "run_c63cd1564e",
+        "status": "passed",
+        "attempts": 1,
+        "seconds": 46.4,
+        "incidents": [
+          "INC-NAS-FULL",
+          "INC-VPN-CERT",
+          "INC-SW-UPLINK"
+        ],
+        "cost_usd": 0.2659,
+        "tokens_in": 308322,
+        "tokens_cached": 143933,
+        "tokens_out": 9141,
+        "grouping": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "ari": 1.0,
+          "unassigned_alerts": 0
+        },
+        "error": null
+      },
+      {
+        "run_id": "run_1180d619e6",
+        "status": "passed",
+        "attempts": 1,
+        "seconds": 54.2,
+        "incidents": [
+          "INC-NAS-FULL",
+          "INC-FW-CERT",
+          "INC-SW-UPLINK"
+        ],
+        "cost_usd": 0.2758,
+        "tokens_in": 265414,
+        "tokens_cached": 91227,
+        "tokens_out": 10437,
+        "grouping": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "ari": 1.0,
+          "unassigned_alerts": 0
+        },
+        "error": null
+      },
+      {
+        "run_id": "run_55e3979e83",
+        "status": "passed",
+        "attempts": 2,
+        "seconds": 52.8,
+        "incidents": [
+          "INC-SFP-UPLINK",
+          "INC-NAS-FULL",
+          "INC-VPN-CERT"
+        ],
+        "cost_usd": 0.3131,
+        "tokens_in": 340611,
+        "tokens_cached": 148285,
+        "tokens_out": 11870,
+        "grouping": {
+          "precision": 0.9803,
+          "recall": 1.0,
+          "f1": 0.9901,
+          "ari": 0.9884,
+          "unassigned_alerts": 0
+        },
+        "error": null
+      }
+    ]
+  }
+}

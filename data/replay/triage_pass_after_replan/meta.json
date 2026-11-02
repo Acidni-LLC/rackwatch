@@ -1,0 +1,25 @@
+{
+  "kind": "triage",
+  "recorded_at": "2026-11-02T14:28:55-0500",
+  "run_id": "run_d4cb66e719",
+  "status": "passed",
+  "attempts": 2,
+  "seconds": 41.2,
+  "incidents": [
+    "INC-NAS",
+    "INC-FW",
+    "INC-SW"
+  ],
+  "cost_usd": 0.364,
+  "tokens_in": 502907,
+  "tokens_cached": 270766,
+  "tokens_out": 7820,
+  "grouping": {
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1": 1.0,
+    "ari": 1.0,
+    "unassigned_alerts": 0
+  },
+  "error": null
+}

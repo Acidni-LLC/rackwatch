@@ -23,7 +23,7 @@ export function Section({ tag, right, children, className = "" }: { tag: string;
   return (
     <section className={`chassis flex min-h-0 flex-col ${className}`}>
       <header className="flex flex-none items-center justify-between gap-3 border-b border-seam px-3 py-2">
-        <span className="tag">{tag}</span>
+        <span className="font-mono text-[11.5px] tracking-widest text-dim uppercase">{tag}</span>
         {right}
       </header>
       <div className="min-h-0 flex-1">{children}</div>

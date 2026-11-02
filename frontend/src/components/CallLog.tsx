@@ -38,18 +38,17 @@ export function CallLog({ calls, limit }: { calls: CallRecord[]; limit: number }
         {ordered.map((c) => (
           <li key={c.id} className="row-in border-b border-seam/50 px-3 py-1.5 font-mono text-[11.5px] leading-snug">
             <div className="flex items-baseline justify-between gap-2">
-              <span className="truncate text-ink">{SHORT[c.model] ?? c.model}</span>
+              <span className="truncate text-ink">
+                {c.purpose}
+                {c.effort ? <span className="text-amber"> {c.effort}</span> : null}
+              </span>
               <span className={c.status === "ok" ? "text-dim" : "text-alarm"}>{c.status === "ok" ? usd(c.est_cost_usd, 4) : c.status}</span>
             </div>
             <div className="flex items-baseline justify-between gap-2 text-faint">
-              <span className="truncate">
-                {c.purpose}
-                {c.effort ? ` · ${c.effort}` : ""}
-              </span>
+              <span className="truncate">{SHORT[c.model] ?? c.model}</span>
               <span className="flex-none">
                 {c.tokens_in ? `${compact(c.tokens_in)}↑ ${compact(c.tokens_out)}↓ ` : ""}
-                {(c.latency_ms / 1000).toFixed(1)}s{c.replayed ? " · replayed" : ""}
-                {c.diverged ? " · diverged" : ""}
+                {(c.latency_ms / 1000).toFixed(1)}s{c.diverged ? " diverged" : c.replayed ? " replay" : ""}
               </span>
             </div>
           </li>

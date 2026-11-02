@@ -28,6 +28,19 @@ function ToolRow({ tool }: { tool: ToolEvent }) {
   );
 }
 
+function Rejection({ feedback }: { feedback: string }) {
+  const [open, setOpen] = useState(false);
+  const lines = feedback.split("\n").filter((l) => l.startsWith("- ")).length;
+  return (
+    <div className="row-in my-1">
+      <button type="button" onClick={() => setOpen(!open)} className="w-full border-l-2 border-alarm px-3 py-1 text-left font-mono text-[12px] text-alarm hover:bg-raised">
+        Rejected: {lines || 1} problem{lines === 1 ? "" : "s"} sent back
+      </button>
+      {open ? <pre className="mx-3 mt-1 mb-2 bg-black p-2 font-mono text-[11px] leading-snug whitespace-pre-wrap text-dim">{feedback}</pre> : null}
+    </div>
+  );
+}
+
 // Turns and tool calls as they happen, grouped by attempt, so a re-plan is visible as a new block.
 export function Timeline({ run }: { run: RunState }) {
   const bottom = useRef<HTMLDivElement>(null);
@@ -60,11 +73,7 @@ export function Timeline({ run }: { run: RunState }) {
                 </li>
               ))}
             </ul>
-            {replan ? (
-              <div className="row-in mx-3 my-2 border-l-2 border-alarm bg-black px-2 py-1.5 font-mono text-[11.5px] leading-snug whitespace-pre-wrap text-alarm">
-                {replan.feedback}
-              </div>
-            ) : null}
+            {replan ? <Rejection feedback={replan.feedback} /> : null}
           </div>
         );
       })}

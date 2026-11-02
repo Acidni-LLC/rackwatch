@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AlertRow, SubmittedIncident, VerifierResult } from "../api";
 import { go } from "../api";
+import { Lamp } from "./bits";
 import { SevenSeg } from "./SevenSeg";
 
-const DEFAULT_TILE = 13;
-const HEADER = 74;
-const BIN_GAP = 12;
+const HEADER = 62;
+const BIN_GAP = 14;
 const NOISE_HEADER = 26;
+const MIN_TILE = 6;
 
 interface Placement {
   x: number;
@@ -19,33 +20,39 @@ interface Placement {
 interface Bin {
   id: string;
   y: number;
-  height: number;
   incident: SubmittedIncident | null;
   count: number;
 }
 
-// The annunciator: every alert is one lit window. Before triage they fill the field. When the agent submits,
-// each tile flies to its incident's tray, and the noise goes dark. With `fill`, tiles grow to cover the space.
+function spacing(step: number) {
+  return Math.max(1, Math.round(step * 0.1));
+}
+
+function binsHeight(counts: number[], noise: number, width: number, step: number) {
+  const columns = Math.max(4, Math.floor(width / step));
+  const rows = (n: number) => Math.max(1, Math.ceil(n / columns));
+  return counts.reduce((sum, n) => sum + HEADER + rows(n) * step + BIN_GAP, 0) + NOISE_HEADER + rows(noise) * step;
+}
+
+// The annunciator: every alert is one lit window. Before triage they fill the field. When the agent submits, each
+// tile flies to its incident's tray and the noise goes dark. Tiles always grow to use all the space they have.
+// Colour means severity on the wall and "outage" in a tray; green is only ever a verdict, never a device.
 export function TileField({
   alerts,
   incidents,
-  noiseIds,
   verdict,
   runId,
   hostnames,
   onHover,
   selectedId,
-  fill = false,
 }: {
   alerts: AlertRow[];
   incidents?: SubmittedIncident[];
-  noiseIds?: string[];
   verdict?: VerifierResult | null;
   runId?: string | null;
   hostnames?: Record<string, { hostname: string | null; u: string }>;
   onHover?: (alert: AlertRow | null) => void;
   selectedId?: string | null;
-  fill?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState({ width: 0, height: 0 });
@@ -59,26 +66,35 @@ export function TileField({
   }, []);
 
   const hasBins = Boolean(incidents && incidents.length);
-  const { tile, gap } = useMemo(() => {
-    if (!fill || !box.width || !box.height || !alerts.length) return { tile: DEFAULT_TILE, gap: 2 };
-    // The largest square step that still fits every alert inside the box.
-    let step = Math.floor(Math.sqrt((box.width * box.height) / alerts.length));
-    while (step > 6 && Math.floor(box.width / step) * Math.floor(box.height / step) < alerts.length) step--;
-    const spacing = Math.max(2, Math.round(step * 0.09));
-    return { tile: step - spacing, gap: spacing };
-  }, [alerts.length, box.height, box.width, fill]);
 
-  const step = tile + gap;
-  const columns = Math.max(8, Math.floor((box.width + gap) / step));
+  const step = useMemo(() => {
+    if (!box.width || !box.height || !alerts.length) return 15;
+    const known = new Set(alerts.map((a) => a.id));
+    const counts = (incidents ?? []).map((i) => i.alert_ids.filter((id) => known.has(id)).length);
+    const noise = alerts.length - counts.reduce((a, b) => a + b, 0);
+    let candidate = Math.floor(Math.sqrt((box.width * box.height) / alerts.length));
+    while (candidate > MIN_TILE) {
+      const fits = hasBins
+        ? binsHeight(counts, noise, box.width, candidate) <= box.height
+        : Math.floor(box.width / candidate) * Math.floor(box.height / candidate) >= alerts.length;
+      if (fits) break;
+      candidate--;
+    }
+    return candidate;
+  }, [alerts, box.height, box.width, hasBins, incidents]);
 
-  const { placements, bins, height } = useMemo(() => {
+  const gap = spacing(step);
+  const tile = step - gap;
+  const columns = Math.max(4, Math.floor(box.width / step));
+
+  const { placements, bins } = useMemo(() => {
     const places = new Map<string, Placement>();
     const binList: Bin[] = [];
     if (!hasBins) {
       alerts.forEach((a, i) => {
         places.set(a.id, { x: (i % columns) * step, y: Math.floor(i / columns) * step, noise: false, binned: false, delay: 0 });
       });
-      return { placements: places, bins: binList, height: Math.ceil(alerts.length / columns) * step };
+      return { placements: places, bins: binList };
     }
     const known = new Set(alerts.map((a) => a.id));
     const ordered = [...incidents!].sort((a, b) => b.alert_ids.length - a.alert_ids.length);
@@ -90,67 +106,63 @@ export function TileField({
       const rows = Math.max(1, Math.ceil(ids.length / columns));
       ids.forEach((id, i) => {
         assigned.add(id);
-        places.set(id, {
-          x: (i % columns) * step,
-          y: y + HEADER + Math.floor(i / columns) * step,
-          noise: false,
-          binned: true,
-          delay: 40 + (order++ % 37) * 11,
-        });
+        places.set(id, { x: (i % columns) * step, y: y + HEADER + Math.floor(i / columns) * step, noise: false, binned: true, delay: 40 + (order++ % 37) * 11 });
       });
-      const binHeight = HEADER + rows * step;
-      binList.push({ id: incident.id, y, height: binHeight, incident, count: ids.length });
-      y += binHeight + BIN_GAP;
+      binList.push({ id: incident.id, y, incident, count: ids.length });
+      y += HEADER + rows * step + BIN_GAP;
     }
     const noise = alerts.filter((a) => !assigned.has(a.id));
-    const noiseRows = Math.max(1, Math.ceil(noise.length / columns));
     noise.forEach((a, i) => {
-      places.set(a.id, {
-        x: (i % columns) * step,
-        y: y + NOISE_HEADER + Math.floor(i / columns) * step,
-        noise: true,
-        binned: true,
-        delay: 20 + (order++ % 29) * 9,
-      });
+      places.set(a.id, { x: (i % columns) * step, y: y + NOISE_HEADER + Math.floor(i / columns) * step, noise: true, binned: true, delay: 20 + (order++ % 29) * 9 });
     });
-    binList.push({ id: "noise", y, height: NOISE_HEADER + noiseRows * step, incident: null, count: noise.length });
-    return { placements: places, bins: binList, height: y + NOISE_HEADER + noiseRows * step };
-  }, [alerts, columns, hasBins, incidents, noiseIds, step]);
+    binList.push({ id: "noise", y, incident: null, count: noise.length });
+    return { placements: places, bins: binList };
+  }, [alerts, columns, hasBins, incidents, step]);
 
   const passed = verdict?.passed;
 
   return (
-    <div ref={ref} className="relative w-full" style={fill ? { height: "100%" } : { height }} onMouseLeave={() => onHover?.(null)}>
+    <div ref={ref} className="relative h-full w-full" onMouseLeave={() => onHover?.(null)}>
       {bins.map((bin) =>
         bin.incident ? (
           <button
             key={bin.id}
             type="button"
             onClick={() => runId && go(`/incident/${runId}/${bin.incident!.id}`)}
-            className="row-in absolute left-0 right-0 flex items-start justify-between gap-4 border-t text-left"
-            style={{ top: bin.y, height: HEADER - 6, borderColor: passed ? "var(--color-go)" : passed === false ? "var(--color-alarm)" : "var(--color-seam)" }}
+            className="group row-in absolute right-0 left-0 flex items-center justify-between gap-4 text-left"
+            style={{ top: bin.y, height: HEADER - 8 }}
+            aria-label={`Review ${bin.incident.title}`}
           >
-            <span className="min-w-0 pt-1.5">
-              <span className="block truncate text-[15px] font-bold text-ink">{bin.incident.title}</span>
-              <span className="mt-1 block truncate font-mono text-[12px] text-dim">
-                {hostnames?.[bin.incident.root_cause_device_id]?.hostname ?? bin.incident.root_cause_device_id}{" "}
-                {hostnames?.[bin.incident.root_cause_device_id]?.u ?? ""} · {bin.incident.proposed_fix_id}
+            <span className="flex min-w-0 items-center gap-3">
+              <SevenSeg value={String(bin.count)} height={30} color="#ff3b30" label={`${bin.count} alerts`} />
+              <span className="min-w-0">
+                <span className="block truncate text-[16px] font-bold text-ink">{bin.incident.title}</span>
+                <span className="mt-0.5 block truncate font-mono text-[12.5px] text-dim">
+                  {hostnames?.[bin.incident.root_cause_device_id]?.u ?? bin.incident.root_cause_device_id}
+                  {bin.incident.proposed_fix_id === "ESCALATE" ? " · no approved fix, needs a person" : ` · ${bin.incident.proposed_fix_id}`}
+                </span>
               </span>
             </span>
-            <span className="flex-none pt-1.5">
-              <SevenSeg value={String(bin.count)} height={32} color={passed ? "#4be08a" : passed === false ? "#ff3b30" : "#ffb000"} label={`${bin.count} alerts`} />
-            </span>
+            {passed ? (
+              <span className="flex flex-none items-center gap-2 border border-go px-3 py-1.5 font-mono text-[13px] text-go transition group-hover:bg-go group-hover:text-black">
+                <Lamp state="go" size={8} /> Review and approve
+              </span>
+            ) : passed === false ? (
+              <span className="flex flex-none items-center gap-2 font-mono text-[13px] text-alarm">
+                <Lamp state="alarm" size={8} /> Rejected
+              </span>
+            ) : null}
           </button>
         ) : (
-          <div key={bin.id} className="absolute left-0 right-0 font-mono text-[11px] uppercase tracking-widest text-faint" style={{ top: bin.y + 4 }}>
-            noise · {bin.count} alerts
+          <div key={bin.id} className="absolute right-0 left-0 font-mono text-[12.5px] text-dim" style={{ top: bin.y + 3 }}>
+            Noise: {bin.count} alerts, no incident
           </div>
         ),
       )}
       {alerts.map((alert) => {
         const place = placements.get(alert.id);
         if (!place) return null;
-        const tone = place.noise ? "is-noise" : place.binned && passed ? "is-resolved" : `is-${alert.severity}`;
+        const tone = place.noise ? "is-noise" : place.binned ? "is-critical" : `is-${alert.severity}`;
         const corner = Math.max(4, Math.round(tile * 0.26));
         return (
           <div
@@ -165,7 +177,7 @@ export function TileField({
               outline: selectedId === alert.id ? "2px solid #fff" : undefined,
             }}
           >
-            {alert.had_pii && !place.noise ? <span style={{ position: "absolute", right: 0, top: 0, width: corner, height: corner, background: "#efeee6" }} /> : null}
+            {alert.had_pii && !place.binned ? <span style={{ position: "absolute", right: 0, top: 0, width: corner, height: corner, background: "#efeee6" }} /> : null}
           </div>
         );
       })}

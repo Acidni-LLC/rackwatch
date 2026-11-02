@@ -67,7 +67,7 @@ export default function Alerts({ status }: { status: Status | null }) {
         </div>
       </div>
       <ErrorLine message={error} />
-      <div className="chassis min-h-0 flex-1 overflow-hidden p-3">{data ? <TileField fill alerts={data.alerts} onHover={setHover} selectedId={hover?.id} /> : <p className="font-mono text-[13px] text-faint">Loading alerts.</p>}</div>
+      <div className="chassis min-h-0 flex-1 overflow-hidden p-3">{data ? <TileField alerts={data.alerts} onHover={setHover} selectedId={hover?.id} /> : <p className="font-mono text-[13px] text-faint">Loading alerts.</p>}</div>
       <div className="chassis flex flex-none flex-wrap items-center justify-between gap-4 px-4 py-2.5">
         <p className="min-h-[20px] min-w-0 flex-1 truncate font-mono text-[13px]">
           {hover ? (

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { AlertRow, AlertsResponse, Device, RackState, Status } from "../api";
-import { get, go, usd } from "../api";
+import { get, go } from "../api";
 import { CallLog } from "../components/CallLog";
 import { Btn, ErrorLine, Lamp, Section } from "../components/bits";
 import { SevenSeg } from "../components/SevenSeg";
@@ -71,63 +71,57 @@ export default function Incidents({ status, runId }: { status: Status | null; ru
   const verdict = run.verifier[run.verifier.length - 1] ?? null;
   const incidentCount = submission?.incidents.length ?? 0;
   const running = run.status === "running";
-  const tally = run.calls.reduce((sum, c) => sum + c.est_cost_usd, 0);
 
   return (
-    <div className="grid h-full min-h-0 grid-cols-[minmax(240px,300px)_minmax(0,1fr)_minmax(250px,310px)] grid-rows-[auto_minmax(0,1fr)] gap-3 p-3">
+    <div className="grid h-full min-h-0 grid-cols-[minmax(220px,260px)_minmax(0,1fr)_minmax(220px,250px)] grid-rows-[auto_minmax(0,1fr)] gap-2 p-2">
       <div className="chassis col-span-3 flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-2.5">
-        <div className="flex items-center gap-3">
-          <SevenSeg value={String(alerts.length).padStart(3, "0")} height={36} color={incidentCount ? "#5a5f5a" : "#ff3b30"} label={`${alerts.length} alerts`} />
-          <span className="font-mono text-[18px] text-dim">→</span>
-          <SevenSeg value={incidentCount ? String(incidentCount).padStart(2, " ") : "--"} height={36} color={verdict?.passed ? "#4be08a" : "#ffb000"} label={`${incidentCount} incidents`} />
+        <div className="flex items-center gap-4">
+          <SevenSeg value={String(alerts.length).padStart(3, "0")} height={58} color="#ff3b30" label={`${alerts.length} alerts`} />
+          <span className="text-[28px] leading-none text-dim" aria-hidden>
+            →
+          </span>
+          <SevenSeg value={incidentCount ? String(incidentCount) : "-"} height={58} color={verdict?.passed ? "#4be08a" : "#ffb000"} label={`${incidentCount} incidents`} />
         </div>
-        <div className="flex items-center gap-2">
-          <SevenSeg value={elapsed(run.startedAt, run.finishedAt, now)} height={22} label="elapsed" />
-          <span className="font-mono text-[12px] text-dim">{usd(tally)} est.</span>
-        </div>
-        <div className="flex items-center gap-2 font-mono text-[13px]">
-          <Lamp state={running ? "amber" : run.status === "passed" ? "go" : "alarm"} pulse={running} />
-          {running ? (
-            <span className="text-amber">
-              Attempt {run.attempt || 1} of 3 · {run.tools.length} tool calls
-            </span>
-          ) : run.status === "passed" ? (
-            <span className="text-go">
-              Verified on attempt {run.summary?.attempts}. Each incident needs a person to approve it.
-            </span>
-          ) : run.status === "failed" ? (
-            <span className="text-alarm">The verifier rejected 3 attempts. Escalate to a person.</span>
-          ) : run.status === "budget_exceeded" ? (
-            <span className="text-alarm">Stopped: budget cap reached.</span>
-          ) : (
-            <span className="text-alarm">Run stopped: {run.error ?? run.status}</span>
-          )}
+        <div className="flex min-w-0 flex-col gap-1">
+          <div className="flex items-center gap-2 text-[17px] font-bold">
+            <Lamp state={running ? "amber" : run.status === "passed" ? "go" : "alarm"} pulse={running} />
+            {running ? (
+              <span>
+                Attempt {run.attempt || 1} of 3, {run.tools.length} tool calls
+              </span>
+            ) : run.status === "passed" ? (
+              <span>Verified on attempt {run.summary?.attempts}. Waiting for your approval.</span>
+            ) : run.status === "failed" ? (
+              <span className="text-alarm">The verifier rejected 3 attempts. Escalate to a person.</span>
+            ) : run.status === "budget_exceeded" ? (
+              <span className="text-alarm">Stopped at the budget cap.</span>
+            ) : (
+              <span className="text-alarm">The run stopped.</span>
+            )}
+          </div>
+          <span className="font-mono text-[12.5px] text-dim">{elapsed(run.startedAt, run.finishedAt, now)} elapsed</span>
         </div>
         <div className="ml-auto flex items-center gap-2">
-          {!running && incidentCount ? (
-            <Btn tone="go" onClick={() => go(`/metrics/${activeId}`)}>
-              Results
-            </Btn>
-          ) : null}
+          {!running && incidentCount ? <Btn onClick={() => go(`/metrics/${activeId}`)}>Metrics</Btn> : null}
           <Btn onClick={() => go("/alerts")}>New run</Btn>
         </div>
       </div>
 
-      <Section tag="AGENT" className="min-h-0">
+      <Section tag="Agent" className="min-h-0">
         <Timeline run={run} />
       </Section>
 
-      <div className="flex min-h-0 flex-col gap-3">
+      <div className="flex min-h-0 flex-col gap-2">
         <ErrorLine message={run.error} />
         <section className="chassis flex-none">
           <VerifierPanel results={run.verifier} running={running} />
         </section>
-        <section className="chassis min-h-0 flex-1 overflow-y-auto p-3">
-          <TileField alerts={alerts} incidents={submission?.incidents} noiseIds={submission?.noise_alert_ids} verdict={verdict} runId={activeId} hostnames={hostnames} />
+        <section className="chassis min-h-0 flex-1 overflow-hidden p-3">
+          <TileField alerts={alerts} incidents={submission?.incidents} verdict={verdict} runId={activeId} hostnames={hostnames} />
         </section>
       </div>
 
-      <Section tag="META CALLS" className="min-h-0">
+      <Section tag="Meta calls" className="min-h-0">
         <CallLog calls={run.calls} limit={status?.budget.per_run ?? 1.5} />
       </Section>
     </div>
