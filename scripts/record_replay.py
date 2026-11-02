@@ -3,6 +3,7 @@
     python scripts/record_replay.py vision     data/replay/vision_sample_rack/
     python scripts/record_replay.py triage     data/replay/triage_pass_after_replan/  (keeps trying for a real re-plan)
     python scripts/record_replay.py voice      data/replay/voice_note/
+    python scripts/record_replay.py open       data/replay/triage_spark_open/  (a normal run on Muse Spark Open)
 
 Triage uses the strict first attempt, which usually fails the verifier on its merits. A take is kept only if the
 first attempt really failed and a later one really passed. Otherwise it is discarded and the script tries again, up to
@@ -28,7 +29,7 @@ from app import db as dbmod  # noqa: E402
 from app import voice as voice_mod  # noqa: E402
 from app.agent.loop import finish_run, new_run_id, start_run  # noqa: E402
 from app.config import get_settings  # noqa: E402
-from app.main import TRIAGE_CASSETTE, VISION_CASSETTE, VOICE_CASSETTE  # noqa: E402
+from app.main import OPEN_CASSETTE, TRIAGE_CASSETTE, VISION_CASSETTE, VOICE_CASSETTE  # noqa: E402
 from app.meta_client import MetaClient  # noqa: E402
 from app.rack import SAMPLE_IMAGE  # noqa: E402
 from app.store import load_dataset  # noqa: E402
@@ -115,6 +116,15 @@ def record_triage(settings, tries: int) -> None:
     raise SystemExit(f"no take qualified in {tries} tries")
 
 
+def record_open(settings) -> None:
+    """A normal run on Muse Spark Open. It is whatever happened on this take, pass or fail, and meta.json says which."""
+    if not settings.fireworks_api_key:
+        raise SystemExit("recording on Muse Spark Open needs FIREWORKS_API_KEY")
+    run_settings, conn = fresh(settings, "open")
+    summary = run_once(conn, run_settings, OPEN_CASSETTE, None, False, 0.0, "open")
+    describe(conn, summary["run_id"])
+
+
 def record_voice(settings, wav: Path) -> None:
     triage_dir = Path(settings.replay_dir) / TRIAGE_CASSETTE
     if not (triage_dir / "cassette.jsonl").exists():
@@ -147,7 +157,7 @@ def record_voice(settings, wav: Path) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("what", choices=["vision", "triage", "voice"])
+    parser.add_argument("what", choices=["vision", "triage", "voice", "open"])
     parser.add_argument("--tries", type=int, default=4)
     parser.add_argument("--min-devices", type=int, default=13)
     parser.add_argument("--wav", default=str(ROOT / "data/voice/sample_note.wav"))
@@ -159,6 +169,8 @@ def main() -> None:
         record_vision(settings, args.tries, args.min_devices)
     elif args.what == "triage":
         record_triage(settings, args.tries)
+    elif args.what == "open":
+        record_open(settings)
     else:
         record_voice(settings, Path(args.wav))
 

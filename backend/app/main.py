@@ -22,6 +22,7 @@ from sse_starlette.sse import EventSourceResponse
 from . import db as dbmod
 from . import metrics, rack, store, voice
 from .agent.loop import finish_run, new_run_id, run_triage, start_run
+from .agent.router import ENGINES
 from .budget import BudgetGuard
 from .config import DATA_DIR, REPO_ROOT, UPLOADS_DIR, Settings, get_settings
 from .events import emit, events_after, now_iso
@@ -30,6 +31,7 @@ from .pii import PiiScrubber
 from .replay import cassette_meta, cassette_path
 
 TRIAGE_CASSETTE = "triage_pass_after_replan"
+OPEN_CASSETTE = "triage_spark_open"
 VOICE_CASSETTE = "voice_note"
 VISION_CASSETTE = "vision_sample_rack"
 SAMPLE_VOICE = DATA_DIR / "voice" / "sample_note.wav"
@@ -112,7 +114,13 @@ def status() -> dict:
         "devices": c.execute("SELECT COUNT(*) AS n FROM devices").fetchone()["n"],
         "pii_tokens": pii,
         "cassettes": available_cassettes(s),
-        "models": {"spark": s.spark_model, "sam": s.sam_model, "asr": s.asr_model},
+        "models": {
+            "spark": s.spark_model,
+            "sam": s.sam_model,
+            "asr": s.asr_model,
+            "spark_open": s.spark_open_model,
+        },
+        "open_weight_key": bool(s.fireworks_api_key),
     }
 
 
@@ -293,16 +301,21 @@ class TriageRequest(BaseModel):
     replay: bool = False
     speed: float = 1.0
     demo_strict: bool = False
+    engine: str = "hosted"  # hosted | open | mixed; on replay, open picks the Spark Open recording
 
 
-def _triage_worker(run_id: str, replay: bool, speed: float, demo_strict: bool) -> None:
+def _triage_worker(
+    run_id: str, replay: bool, speed: float, demo_strict: bool, engine: str, cassette: str
+) -> None:
     c = dbmod.connect(settings().db_path)
     s = settings()
     try:
-        client = _client_for_run(s, c, run_id, replay, TRIAGE_CASSETTE, speed)
-        if replay:
-            demo_strict = bool(cassette_meta(s.replay_dir, TRIAGE_CASSETTE).get("strict"))
-        run_triage(c, client, s, run_id=run_id, demo_strict=demo_strict)
+        client = _client_for_run(s, c, run_id, replay, cassette, speed)
+        if replay:  # a replay has to run the way it was recorded, or its calls will not line up
+            meta = cassette_meta(s.replay_dir, cassette)
+            demo_strict = bool(meta.get("strict"))
+            engine = meta.get("engine", "hosted")
+        run_triage(c, client, s, run_id=run_id, demo_strict=demo_strict, engine=engine)
     except Exception as error:
         emit(c, run_id, "run_error", {"message": f"{type(error).__name__}: {error}"})
         finish_run(c, run_id, "error", 0)
@@ -313,15 +326,18 @@ def _triage_worker(run_id: str, replay: bool, speed: float, demo_strict: bool) -
 @app.post("/api/triage")
 def triage(request: TriageRequest) -> dict:
     s = settings()
+    if request.engine not in ENGINES:
+        raise HTTPException(422, f"engine must be one of {', '.join(ENGINES)}")
     use_replay = request.replay or s.mode == "replay"
+    cassette = OPEN_CASSETTE if request.engine == "open" else TRIAGE_CASSETTE
     if use_replay:
-        _ensure_cassette(s, TRIAGE_CASSETTE)
+        _ensure_cassette(s, cassette)
+    elif request.engine != "hosted" and not s.fireworks_api_key:
+        raise HTTPException(409, "Running on Muse Spark Open needs FIREWORKS_API_KEY in .env.")
     ensure_dataset()
     run_id = new_run_id()
-    start_run(
-        conn(), run_id, "triage", "replay" if use_replay else s.mode, TRIAGE_CASSETTE if use_replay else None
-    )
-    _thread(_triage_worker, run_id, use_replay, request.speed, request.demo_strict)
+    start_run(conn(), run_id, "triage", "replay" if use_replay else s.mode, cassette if use_replay else None)
+    _thread(_triage_worker, run_id, use_replay, request.speed, request.demo_strict, request.engine, cassette)
     return {"run_id": run_id}
 
 

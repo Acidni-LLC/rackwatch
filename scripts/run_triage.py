@@ -27,10 +27,14 @@ from app.replay import cassette_meta  # noqa: E402
 from app.store import load_dataset  # noqa: E402
 
 
-def run_once(conn, settings, record: str | None, replay: str | None, strict: bool, speed: float) -> dict:
+def run_once(
+    conn, settings, record: str | None, replay: str | None, strict: bool, speed: float, engine: str = "hosted"
+) -> dict:
     run_settings = replace(settings, mode="record" if record else "replay" if replay else "live")
     if replay:
-        strict = bool(cassette_meta(settings.replay_dir, replay).get("strict"))
+        meta = cassette_meta(settings.replay_dir, replay)
+        strict = bool(meta.get("strict"))
+        engine = meta.get("engine", "hosted")
     run_id = new_run_id()
     cassette = record or replay
     start_run(conn, run_id, "triage", run_settings.mode, cassette)
@@ -38,10 +42,11 @@ def run_once(conn, settings, record: str | None, replay: str | None, strict: boo
         settings=run_settings, conn=conn, run_id=run_id, cassette=cassette, replay_speed=speed
     )
     started = time.perf_counter()
-    result = run_triage(conn, client, run_settings, run_id=run_id, demo_strict=strict)
+    result = run_triage(conn, client, run_settings, run_id=run_id, demo_strict=strict, engine=engine)
     seconds = round(time.perf_counter() - started, 1)
     metrics = run_metrics(conn, run_id)
     summary = {
+        "engine": engine,
         "run_id": run_id,
         "status": result.status,
         "attempts": result.attempts,
@@ -104,13 +109,14 @@ def main() -> None:
     parser.add_argument("--replay")
     parser.add_argument("--strict", action="store_true")
     parser.add_argument("--speed", type=float, default=0.0)
+    parser.add_argument("--engine", choices=["hosted", "open", "mixed"], default="hosted")
     parser.add_argument("--reload", action="store_true", help="reload the dataset first")
     args = parser.parse_args()
     settings = get_settings()
     conn = dbmod.connect(settings.db_path)
     if args.reload or not conn.execute("SELECT 1 FROM alerts LIMIT 1").fetchone():
         print("dataset:", load_dataset(conn, settings.generated_dir))
-    summary = run_once(conn, settings, args.record, args.replay, args.strict, args.speed)
+    summary = run_once(conn, settings, args.record, args.replay, args.strict, args.speed, args.engine)
     print(json.dumps(summary, indent=2))
     describe(conn, summary["run_id"])
 

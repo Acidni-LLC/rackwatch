@@ -3,6 +3,7 @@ import { compact, usd } from "../api";
 
 const SHORT: Record<string, string> = {
   "muse-spark-1.3": "spark-1.3",
+  "accounts/fireworks/models/muse-spark-open": "spark-open (open weights)",
   "sam-3.1": "sam-3.1",
   "muse-voice-transcribe-1.0": "voice-1.0",
 };

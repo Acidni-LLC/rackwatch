@@ -44,6 +44,25 @@ class TriageResult:
     error: str | None = None
 
 
+def portable_input(messages: list, model: str) -> list:
+    """A mixed run crosses providers each time the effort changes. A reasoning item is only valid for the model that
+    produced it, and output item ids belong to their provider, so each turn sends the other model's items without them.
+    The tool calls and their outputs are what carry the investigation across."""
+    portable = []
+    for item in messages:
+        origin = item.get("_model")
+        if origin is None:
+            portable.append(item)
+            continue
+        clean = {k: v for k, v in item.items() if k != "_model"}
+        if origin != model:
+            if clean.get("type") == "reasoning":
+                continue
+            clean = {k: v for k, v in clean.items() if k not in ("id", "status")}
+        portable.append(clean)
+    return portable
+
+
 def new_run_id() -> str:
     return f"run_{uuid.uuid4().hex[:10]}"
 
@@ -250,7 +269,9 @@ def run_triage(
     production: bool = False,
     max_turns: int = MAX_TURNS,
     max_attempts: int = MAX_ATTEMPTS,
+    engine: str | None = None,
 ) -> TriageResult:
+    engine = engine or settings.engine
     run_id = run_id or client.run_id or new_run_id()
     client.run_id = run_id
     mode = "replay" if type(client.transport).__name__ == "ReplayTransport" else settings.mode
@@ -284,7 +305,7 @@ def run_triage(
                 conn,
                 run_id,
                 "attempt",
-                {"attempt": attempt, "max_attempts": max_attempts, "turn_cap": turn_cap},
+                {"attempt": attempt, "max_attempts": max_attempts, "turn_cap": turn_cap, "engine": engine},
             )
             submitted = False
             for turn in range(1, turn_cap + 1):
@@ -294,18 +315,24 @@ def run_triage(
                 effort = router.pick_effort(turn, ctx.drafted, strict_now)
                 # On the last turn submit_incidents is the only tool on offer, so a rushed plan reaches the verifier
                 # rather than timing out unseen. The API supports only tool_choice "auto", so it cannot be forced.
+                model = router.model_for(engine, effort, settings)
                 response = client.responses(
                     purpose=router.purpose_for(effort, attempt),
-                    model=settings.spark_model,
+                    model=model,
                     instructions=prompts.SYSTEM_PROMPT,
-                    input=messages,
+                    input=portable_input(messages, model) if engine == "mixed" else messages,
                     tools=[SUBMIT_DEFINITION] if turn == turn_cap else DEFINITIONS,
                     effort=effort,
                     max_output_tokens=MAX_OUTPUT[effort],
                     store=False,
                     include=["reasoning.encrypted_content"],
                 )
-                messages = messages + response.output
+                output = (
+                    [{**i, "_model": model} for i in response.output]
+                    if engine == "mixed"
+                    else response.output
+                )
+                messages = messages + output
                 _emit_reasoning(conn, run_id, attempt, turn, response.output)
                 calls = response.function_calls
                 if not calls:

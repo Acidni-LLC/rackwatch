@@ -30,15 +30,19 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--n", type=int, default=5)
     parser.add_argument("--strict", action="store_true")
+    parser.add_argument("--engine", choices=["hosted", "open", "mixed"], default="hosted")
     parser.add_argument("--out", default=str(ROOT / "docs/eval.json"))
     args = parser.parse_args()
 
+    kind = "strict" if args.strict else "normal"
+    if args.engine != "hosted":
+        kind = args.engine
     settings = replace(get_settings(), db_path=ROOT / "data/runs/eval.sqlite")
     conn = dbmod.connect(settings.db_path)
     load_dataset(conn, settings.generated_dir)
     runs = []
     for i in range(args.n):
-        summary = run_once(conn, settings, None, None, args.strict, 0.0)
+        summary = run_once(conn, settings, None, None, args.strict, 0.0, args.engine)
         runs.append(summary)
         grouping = summary["grouping"] or {}
         print(
@@ -48,7 +52,8 @@ def main() -> None:
         )
     passed = [r for r in runs if r["status"] == "passed"]
     result = {
-        "kind": "strict" if args.strict else "normal",
+        "kind": kind,
+        "engine": args.engine,
         "date": time.strftime("%Y-%m-%d"),
         "dataset": "seed 42, 512 alerts",
         "n": len(runs),

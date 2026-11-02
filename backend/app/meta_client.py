@@ -1,4 +1,6 @@
-"""The ONLY place that talks to api.meta.ai. Every model call passes through MetaClient, which:
+"""The ONLY place that talks to a model API: api.meta.ai, and Fireworks for Meta's open-weight Muse Spark Open.
+
+Every model call passes through MetaClient, which:
 
 1. refuses payloads that still hold PII (app.pii),
 2. refuses calls that would pass a budget cap (app.budget),
@@ -31,6 +33,7 @@ __all__ = ["BudgetExceeded", "MetaClient", "MetaResponse", "Usage", "UnscrubbedP
 
 ASR_ENDPOINT = "/v1/asr/transcribe"
 RESPONSES_ENDPOINT = "/v1/responses"
+OPEN_ENDPOINT = "fireworks:/v1/responses"
 DEFAULT_MAX_OUTPUT_TOKENS = 4000
 
 
@@ -138,6 +141,30 @@ class LiveTransport:
         return {"json": response.json(), "latency_ms": int((time.perf_counter() - started) * 1000)}
 
 
+class FireworksTransport(LiveTransport):
+    """Muse Spark Open on Fireworks serverless. The same Responses shape, with two differences:
+    `include` only takes logprobs there, and its reasoning items carry readable summaries, not encrypted content."""
+
+    def __init__(self, settings: Settings) -> None:
+        if not settings.fireworks_api_key:
+            raise RuntimeError("FIREWORKS_API_KEY is not set; Muse Spark Open needs it")
+        from openai import OpenAI
+
+        self.settings = settings
+        self.sdk = OpenAI(
+            api_key=settings.fireworks_api_key,
+            base_url=settings.fireworks_base_url,
+            max_retries=4,
+            timeout=180,
+        )
+
+    def responses(self, request: dict, purpose: str, req_hash: str) -> dict:
+        return super().responses({k: v for k, v in request.items() if k != "include"}, purpose, req_hash)
+
+    def transcribe(self, request: dict, audio: bytes, filename: str, purpose: str, req_hash: str) -> dict:
+        raise RuntimeError("voice notes use Muse Voice Transcribe on the Meta API")
+
+
 class RecordingTransport:
     """Live calls, each also written to a cassette."""
 
@@ -217,6 +244,10 @@ class MetaClient:
         self.budget = BudgetGuard(self.settings, self.conn)
         self.writer: CassetteWriter | None = None
         self.call_ids: list[str] = []
+        self.open_transport: Transport | None = None
+        self.routes_open = (
+            transport is None and self.settings.mode != "replay"
+        )  # fakes and cassettes answer for both
         if transport is not None:
             self.transport = transport
         elif self.settings.mode == "replay":
@@ -228,8 +259,12 @@ class MetaClient:
                 raise ValueError("record mode needs a cassette name")
             self.writer = CassetteWriter(self.settings.replay_dir, cassette)
             self.transport = RecordingTransport(LiveTransport(self.settings), self.writer)
+            if self.settings.fireworks_api_key:
+                self.open_transport = RecordingTransport(FireworksTransport(self.settings), self.writer)
         else:
             self.transport = LiveTransport(self.settings)
+            if self.settings.fireworks_api_key:
+                self.open_transport = FireworksTransport(self.settings)
 
     # ---- public API --------------------------------------------------------------------
 
@@ -258,13 +293,12 @@ class MetaClient:
             if effort:
                 request["reasoning"] = {"effort": effort}
         req_hash = request_hash(request)
-        self._refuse_or_pass(purpose, model, RESPONSES_ENDPOINT, effort, req_hash, request)
+        endpoint = OPEN_ENDPOINT if model == self.settings.spark_open_model else RESPONSES_ENDPOINT
+        self._refuse_or_pass(purpose, model, endpoint, effort, req_hash, request)
         try:
-            result = self.transport.responses(request, purpose, req_hash)
+            result = self._transport_for(model).responses(request, purpose, req_hash)
         except Exception as error:
-            self._log(
-                purpose, model, RESPONSES_ENDPOINT, effort, req_hash, Usage(), 0, "error", self._redact(error)
-            )
+            self._log(purpose, model, endpoint, effort, req_hash, Usage(), 0, "error", self._redact(error))
             raise
         response_json = result["json"]
         usage = Usage.from_json(response_json.get("usage"))
@@ -272,7 +306,7 @@ class MetaClient:
         call_id = self._log(
             purpose,
             model,
-            RESPONSES_ENDPOINT,
+            endpoint,
             effort,
             req_hash,
             usage,
@@ -339,6 +373,13 @@ class MetaClient:
 
     # ---- internals ---------------------------------------------------------------------
 
+    def _transport_for(self, model: str) -> Transport:
+        if self.routes_open and model == self.settings.spark_open_model:
+            if self.open_transport is None:
+                raise RuntimeError("Muse Spark Open needs FIREWORKS_API_KEY in .env")
+            return self.open_transport
+        return self.transport
+
     def _refuse_or_pass(self, purpose, model, endpoint, effort, req_hash, request) -> None:
         try:
             assert_scrubbed(request, self.names_guard)
@@ -355,8 +396,10 @@ class MetaClient:
 
     def _redact(self, value: Any) -> str:
         text = str(value)
-        key = self.settings.api_key
-        return text.replace(key, "<KEY>") if key else text
+        for key in (self.settings.api_key, self.settings.fireworks_api_key):
+            if key:
+                text = text.replace(key, "<KEY>")
+        return text
 
     @staticmethod
     def _summarize_output(response_json: dict) -> str:

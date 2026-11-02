@@ -55,6 +55,11 @@ class Settings:
     generated_dir: Path = GENERATED_DIR
     replay_dir: Path = REPLAY_DIR
     ffmpeg: str = "ffmpeg"
+    # Muse Spark Open, Meta's open-weight model, through a partner (Fireworks serverless).
+    fireworks_api_key: str = field(default="", repr=False)
+    fireworks_base_url: str = "https://api.fireworks.ai/inference/v1"
+    spark_open_model: str = "accounts/fireworks/models/muse-spark-open"
+    engine: str = "hosted"  # hosted | open | mixed; app.agent.router says what each means
 
 
 def get_settings(**overrides) -> Settings:
@@ -82,6 +87,10 @@ def get_settings(**overrides) -> Settings:
         max_tokens_per_run=int(env.get("MAX_TOKENS_PER_RUN", 600_000)),
         prices=prices,
         ffmpeg=env.get("FFMPEG_PATH") or "ffmpeg",
+        fireworks_api_key=env.get("FIREWORKS_API_KEY", "").strip(),
+        fireworks_base_url=env.get("FIREWORKS_BASE_URL") or "https://api.fireworks.ai/inference/v1",
+        spark_open_model=env.get("SPARK_OPEN_MODEL") or "accounts/fireworks/models/muse-spark-open",
+        engine=env.get("ENGINE") or "hosted",
     )
     values.update(overrides)
     return Settings(**values)

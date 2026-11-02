@@ -107,6 +107,7 @@ export default function Incidents({ status, runId }: { status: Status | null; ru
           </div>
           <span className="font-mono text-[12.5px] text-dim">
             {elapsed(run.startedAt, run.finishedAt, now)} elapsed · ${spent.toFixed(2)} est.
+            {run.engine === "open" ? " · Muse Spark Open on Fireworks" : run.engine === "mixed" ? " · Muse Spark Open for tool turns, Muse Spark 1.3 for planning" : ""}
             {run.mode === "replay" ? " · replay of a recorded run, with the tools and verifier running for real" : ""}
           </span>
         </div>

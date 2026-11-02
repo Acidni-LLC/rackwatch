@@ -27,11 +27,13 @@ export default function Alerts({ status }: { status: Status | null }) {
   const liveAvailable = status && status.mode !== "replay";
   const hasRecording = status?.cassettes.includes("triage_pass_after_replan");
 
-  async function start(replay: boolean, strict = false) {
+  const hasOpenRecording = status?.cassettes.includes("triage_spark_open");
+
+  async function start(replay: boolean, strict = false, engine = "hosted") {
     setStarting(true);
     setError(null);
     try {
-      const { run_id } = await post<{ run_id: string }>("/api/triage", { replay, demo_strict: strict, speed: replay ? speed : 1 });
+      const { run_id } = await post<{ run_id: string }>("/api/triage", { replay, demo_strict: strict, speed: replay ? speed : 1, engine });
       go(`/run/${run_id}`);
     } catch (e) {
       setError((e as Error).message);
@@ -60,11 +62,21 @@ export default function Alerts({ status }: { status: Status | null }) {
               <Btn disabled={starting} onClick={() => start(false, true)} title="First attempt at low effort with a 6-turn cap, which often fails the verifier and forces a re-plan">
                 Live, rushed first try
               </Btn>
+              {status?.open_weight_key ? (
+                <Btn disabled={starting} onClick={() => start(false, false, "open")} title="Every turn on Muse Spark Open, Meta's open-weight model, through Fireworks">
+                  Live on open weights
+                </Btn>
+              ) : null}
             </>
           ) : null}
           <Btn tone={liveAvailable ? "plain" : "amber"} disabled={starting || !hasRecording} onClick={() => start(true)} title={hasRecording ? "Replays a recorded run. The tools and the verifier run for real." : "No recording found"}>
             Replay recorded run
           </Btn>
+          {hasOpenRecording ? (
+            <Btn disabled={starting} onClick={() => start(true, false, "open")} title="A recorded run on Muse Spark Open, Meta's open-weight model">
+              Replay on open weights
+            </Btn>
+          ) : null}
           <button type="button" onClick={() => setSpeed(speed === 4 ? 1 : 4)} className="font-mono text-[12.5px] text-dim hover:text-ink" title="Replay speed">
             ×{speed}
           </button>
