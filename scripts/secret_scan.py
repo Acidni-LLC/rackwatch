@@ -1,7 +1,7 @@
 """Secret scan, run by the pre-commit hook and CI. Exit 1 on any finding. Never prints a secret's value.
 
 Three checks over tracked and staged files, plus untracked files that are not ignored:
-1. the exact MODEL_API_KEY / FIREWORKS_API_KEY from the local .env, if there is one (also over git history
+1. the exact value of every API key in the local .env, if there is one (also over git history
    with --history, which is what to run before any push);
 2. detect-secrets, skipping generated data, where hashes look like high-entropy strings;
 3. no .env file is tracked or staged.
@@ -29,6 +29,9 @@ def repo_files() -> list[str]:
     return sorted(n for n in names if (ROOT / n).is_file())
 
 
+KEY_NAMES = ("MODEL_API_KEY", "META_API_KEY", "BASETEN_API_KEY", "FIREWORKS_API_KEY")
+
+
 def local_keys() -> dict[str, str]:
     keys: dict[str, str] = {}
     env_file = ROOT / ".env"
@@ -36,14 +39,14 @@ def local_keys() -> dict[str, str]:
     sources += [
         f"{k}={v}"
         for k, v in os.environ.items()
-        if k in ("MODEL_API_KEY", "FIREWORKS_API_KEY", "META_API_KEY")
+        if k in KEY_NAMES
     ]
     for line in sources:
         if "=" not in line or line.lstrip().startswith("#"):
             continue
         name, value = line.split("=", 1)
         value = value.split(" #", 1)[0].strip()
-        if name.strip() in ("MODEL_API_KEY", "FIREWORKS_API_KEY", "META_API_KEY") and len(value) >= 16:
+        if name.strip() in KEY_NAMES and len(value) >= 16:
             keys[name.strip()] = value
     return keys
 
