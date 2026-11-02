@@ -89,7 +89,10 @@ def parse_ts(ts: str) -> datetime:
 def pair_counts(labels_a: list, labels_b: list) -> tuple[int, int, int, int]:
     """Pairwise (both, a_only, b_only, neither) over two labelings of the same items."""
     contingency = Counter(zip(labels_a, labels_b, strict=True))
-    comb2 = lambda n: n * (n - 1) // 2  # noqa: E731
+
+    def comb2(n: int) -> int:
+        return n * (n - 1) // 2
+
     both = sum(comb2(v) for v in contingency.values())
     in_a = sum(comb2(v) for v in Counter(labels_a).values())
     in_b = sum(comb2(v) for v in Counter(labels_b).values())
@@ -439,9 +442,10 @@ def _r7(sub: Submission, inp: VerifierInputs) -> list[Check]:
 
 def _r8(sub: Submission, inp: VerifierInputs) -> list[Check]:
     out = []
-    fail = lambda inc, detail: out.append(
-        Check(rule=RULES[7], passed=False, detail=detail, incident_id=inc.id)
-    )  # noqa: E731
+
+    def fail(inc, detail) -> None:
+        out.append(Check(rule=RULES[7], passed=False, detail=detail, incident_id=inc.id))
+
     for inc in sub.incidents:
         ticket = inp.tickets.get(inc.ticket_id or "")
         email = inp.emails.get(inc.email_id or "")

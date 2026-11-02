@@ -66,6 +66,10 @@ CREATE TABLE IF NOT EXISTS drafts (
   run_id TEXT NOT NULL, id TEXT NOT NULL, kind TEXT NOT NULL, incident_id TEXT NOT NULL, body TEXT NOT NULL,
   PRIMARY KEY (run_id, id)
 );
+CREATE TABLE IF NOT EXISTS rack_scans (
+  run_id TEXT PRIMARY KEY, rack_id TEXT NOT NULL, image_path TEXT NOT NULL, image_w INTEGER, image_h INTEGER,
+  total_u INTEGER, overlay_path TEXT, accuracy TEXT, created_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS events (
   seq INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL, ts TEXT NOT NULL, type TEXT NOT NULL,
   data TEXT NOT NULL
