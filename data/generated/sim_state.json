@@ -1,0 +1,45 @@
+{
+  "default_dns_server_device_id": "dev_A_08",
+  "dns_records": [
+    {
+      "answers": [
+        "198.51.100.8"
+      ],
+      "name": "ad.acme.example",
+      "served_by_device_id": "dev_A_08"
+    },
+    {
+      "answers": [
+        "192.0.2.1"
+      ],
+      "name": "vpn.acme.example",
+      "served_by_device_id": "dev_A_10"
+    },
+    {
+      "answers": [
+        "198.51.100.4"
+      ],
+      "name": "nas.acme.example",
+      "served_by_device_id": "dev_A_08"
+    }
+  ],
+  "failed_device_ids": [
+    "dev_A_12"
+  ],
+  "gateway_device_id": "dev_A_10",
+  "rtt_ms": {
+    "dev_A_01": 1.72,
+    "dev_A_02": 0.82,
+    "dev_A_04": 1.48,
+    "dev_A_06": 2.3,
+    "dev_A_08": 2.86,
+    "dev_A_10": 2.19,
+    "dev_A_16": 2.99,
+    "dev_A_20": 2.05,
+    "dev_A_30": 1.92,
+    "dev_A_38": 2.67,
+    "dev_A_39": 2.42,
+    "dev_A_41": 1.85,
+    "dev_A_42": 1.45
+  }
+}
