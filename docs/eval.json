@@ -129,5 +129,76 @@
         "error": null
       }
     ]
+  },
+  "vision": {
+    "kind": "vision",
+    "date": "2026-11-02",
+    "n": 5,
+    "of": 14,
+    "devices_range": [
+      9,
+      12
+    ],
+    "serials_range": [
+      7,
+      12
+    ],
+    "u_range": [
+      9,
+      12
+    ],
+    "boxed_range": [
+      13,
+      14
+    ],
+    "seconds_mean": 115.0,
+    "cost_mean_usd": 0.121,
+    "runs": [
+      {
+        "devices": 12,
+        "serials": 12,
+        "u": 12,
+        "boxed": 13,
+        "needs_review": 6,
+        "seconds": 108.8,
+        "cost_usd": 0.1117
+      },
+      {
+        "devices": 11,
+        "serials": 9,
+        "u": 11,
+        "boxed": 14,
+        "needs_review": 10,
+        "seconds": 143.8,
+        "cost_usd": 0.1572
+      },
+      {
+        "devices": 11,
+        "serials": 9,
+        "u": 11,
+        "boxed": 14,
+        "needs_review": 6,
+        "seconds": 131.0,
+        "cost_usd": 0.1364
+      },
+      {
+        "devices": 9,
+        "serials": 7,
+        "u": 9,
+        "boxed": 13,
+        "needs_review": 4,
+        "seconds": 71.8,
+        "cost_usd": 0.0758
+      },
+      {
+        "devices": 12,
+        "serials": 10,
+        "u": 12,
+        "boxed": 14,
+        "needs_review": 7,
+        "seconds": 119.6,
+        "cost_usd": 0.1238
+      }
+    ]
   }
 }

@@ -13,7 +13,7 @@ export function Lamp({ state, size = 10, pulse = false, label }: { state: "off" 
         borderRadius: "50%",
         flex: "none",
         background: colors[state],
-        boxShadow: state === "off" ? "inset 0 1px 2px #000" : `0 0 ${size}px ${colors[state]}, inset 0 1px 1px rgb(255 255 255 / 0.4)`,
+        boxShadow: state === "off" ? "inset 0 1px 2px #000" : `0 0 ${size / 2}px ${colors[state]}`,
       }}
     />
   );

@@ -14,7 +14,7 @@ function ToolRow({ tool }: { tool: ToolEvent }) {
   return (
     <li className="row-in">
       <button type="button" onClick={() => setOpen(!open)} className="flex w-full items-baseline gap-2 px-3 py-1 text-left font-mono text-[12px] hover:bg-raised">
-        <span className="flex-none text-amber">{tool.name}</span>
+        <span className={`flex-none ${tool.name === "submit_incidents" ? "text-amber" : "text-ink"}`}>{tool.name}</span>
         <span className="truncate text-dim">{preview(tool)}</span>
       </button>
       {open ? (

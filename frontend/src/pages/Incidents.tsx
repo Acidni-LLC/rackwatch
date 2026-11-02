@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { AlertRow, AlertsResponse, Device, RackState, Status } from "../api";
 import { get, go } from "../api";
 import { CallLog } from "../components/CallLog";
+import { RackMini } from "../components/RackMini";
 import { Btn, ErrorLine, Lamp, Section } from "../components/bits";
 import { SevenSeg } from "../components/SevenSeg";
 import { TileField } from "../components/TileField";
@@ -35,6 +36,7 @@ export default function Incidents({ status, runId }: { status: Status | null; ru
   const [alerts, setAlerts] = useState<AlertRow[]>([]);
   const [devices, setDevices] = useState<Device[]>([]);
   const [now, setNow] = useState(Date.now());
+  const [trace, setTrace] = useState(false);
 
   useEffect(() => {
     get<AlertsResponse>("/api/alerts").then((d) => setAlerts(d.alerts));
@@ -71,16 +73,20 @@ export default function Incidents({ status, runId }: { status: Status | null; ru
   const verdict = run.verifier[run.verifier.length - 1] ?? null;
   const incidentCount = submission?.incidents.length ?? 0;
   const running = run.status === "running";
+  const done = run.status === "passed";
+  const showTrace = !done || trace;
+  const firstIncident = done ? [...(submission?.incidents ?? [])].sort((a, b) => b.alert_ids.length - a.alert_ids.length)[0]?.id : null;
+  const spent = run.calls.reduce((sum, c) => sum + c.est_cost_usd, 0);
 
   return (
     <div className="grid h-full min-h-0 grid-cols-[minmax(220px,260px)_minmax(0,1fr)_minmax(220px,250px)] grid-rows-[auto_minmax(0,1fr)] gap-2 p-2">
       <div className="chassis col-span-3 flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-2.5">
         <div className="flex items-center gap-4">
-          <SevenSeg value={String(alerts.length).padStart(3, "0")} height={58} color="#ff3b30" label={`${alerts.length} alerts`} />
+          <SevenSeg value={String(alerts.length).padStart(3, "0")} height={64} color={incidentCount ? "#7a1d18" : "#ff3b30"} label={`${alerts.length} alerts`} />
           <span className="text-[28px] leading-none text-dim" aria-hidden>
             →
           </span>
-          <SevenSeg value={incidentCount ? String(incidentCount) : "-"} height={58} color={verdict?.passed ? "#4be08a" : "#ffb000"} label={`${incidentCount} incidents`} />
+          <SevenSeg value={incidentCount ? String(incidentCount) : "-"} height={84} color={verdict?.passed ? "#4be08a" : "#ffb000"} label={`${incidentCount} incidents`} />
         </div>
         <div className="flex min-w-0 flex-col gap-1">
           <div className="flex items-center gap-2 text-[17px] font-bold">
@@ -100,18 +106,40 @@ export default function Incidents({ status, runId }: { status: Status | null; ru
             )}
           </div>
           <span className="font-mono text-[12.5px] text-dim">
-            {elapsed(run.startedAt, run.finishedAt, now)} elapsed
+            {elapsed(run.startedAt, run.finishedAt, now)} elapsed · ${spent.toFixed(2)} est.
             {run.mode === "replay" ? " · replay of a recorded run, with the tools and verifier running for real" : ""}
           </span>
         </div>
-        <div className="ml-auto flex items-center gap-2">
-          {!running && incidentCount ? <Btn onClick={() => go(`/metrics/${activeId}`)}>Metrics</Btn> : null}
-          <Btn onClick={() => go("/alerts")}>New run</Btn>
+        <div className="ml-auto flex items-center gap-3">
+          <button type="button" className="font-mono text-[12.5px] text-dim hover:text-ink" onClick={() => go("/alerts")}>
+            New run
+          </button>
+          {firstIncident ? (
+            <Btn tone="go" onClick={() => go(`/incident/${activeId}/${firstIncident}`)}>
+              Review {incidentCount} incidents
+            </Btn>
+          ) : null}
         </div>
       </div>
 
-      <Section tag="Agent" className="min-h-0">
-        <Timeline run={run} />
+      <Section
+        tag={showTrace ? "Agent" : "Rack A"}
+        className="min-h-0"
+        right={
+          done ? (
+            <button type="button" className="font-mono text-[11.5px] text-dim hover:text-ink" onClick={() => setTrace(!trace)}>
+              {showTrace ? "Rack" : "Agent trace"}
+            </button>
+          ) : undefined
+        }
+      >
+        {showTrace ? (
+          <Timeline run={run} />
+        ) : (
+          <div className="h-full overflow-y-auto p-2">
+            <RackMini devices={devices} highlightIds={submission?.incidents.map((i) => i.root_cause_device_id)} />
+          </div>
+        )}
       </Section>
 
       <div className="flex min-h-0 flex-col gap-2">

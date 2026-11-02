@@ -112,6 +112,9 @@ button:disabled {
 .tile.is-info {
   background: var(--color-info);
 }
+.tile.is-downstream {
+  background: #8a2019;
+}
 .tile.is-noise {
   background: #2f3438;
   box-shadow: none;

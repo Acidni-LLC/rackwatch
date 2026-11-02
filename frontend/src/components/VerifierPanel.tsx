@@ -6,7 +6,7 @@ const RULES: [string, string][] = [
   ["R1_citations_exist", "Cited"],
   ["R2_citations_real", "Real logs"],
   ["R3_citation_relevance", "Relevant"],
-  ["R4_device_resolves", "Device, U"],
+  ["R4_device_resolves", "Rack position"],
   ["R5_coverage", "Coverage"],
   ["R6_grouping_vs_truth", "Grouping"],
   ["R7_fix_allowed", "Fix approved"],
@@ -43,11 +43,17 @@ export function VerifierPanel({ results, running }: { results: VerifierResult[];
             </button>
             {RULES.map(([rule, label]) => {
               const checks = result?.checks.filter((c) => c.rule === rule) ?? [];
-              const bad = checks.some((c) => !c.passed);
-              const state = !result || !checks.length ? "off" : bad ? "alarm" : "go";
+              const failed = checks.filter((c) => !c.passed).length;
+              if (!result || !checks.length) {
+                return (
+                  <span key={rule} className="flex justify-center" role="img" aria-label={`${label}: not run`}>
+                    <Lamp state="off" size={10} pulse={!result && running} />
+                  </span>
+                );
+              }
               return (
-                <span key={rule} className="flex justify-center" aria-label={`${label}: ${state === "go" ? "pass" : state === "alarm" ? "fail" : "not run"}`} role="img">
-                  <Lamp state={state} size={11} pulse={!result && running} />
+                <span key={rule} className={`text-center font-mono text-[13px] font-semibold ${failed ? "text-alarm" : "text-go"}`} aria-label={`${label}: ${failed ? `${failed} failed` : "pass"}`} role="img">
+                  {failed || "✓"}
                 </span>
               );
             })}

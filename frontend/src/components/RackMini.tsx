@@ -12,7 +12,7 @@ const TYPE_COLOR: Record<string, string> = {
 };
 
 // A rack elevation drawn from the CMDB. The root-cause device is the one lit unit.
-export function RackMini({ devices, highlightId, totalU = 42 }: { devices: Device[]; highlightId?: string | null; totalU?: number }) {
+export function RackMini({ devices, highlightId, highlightIds, totalU = 42 }: { devices: Device[]; highlightId?: string | null; highlightIds?: string[]; totalU?: number }) {
   const unit = 11;
   const width = 190;
   const rail = 22;
@@ -30,7 +30,7 @@ export function RackMini({ devices, highlightId, totalU = 42 }: { devices: Devic
       {devices.map((d) => {
         const y = (totalU - d.u_end) * unit + 1;
         const h = (d.u_end - d.u_start + 1) * unit - 1;
-        const lit = d.id === highlightId;
+        const lit = d.id === highlightId || Boolean(highlightIds?.includes(d.id));
         return (
           <g key={d.id}>
             <rect

@@ -40,7 +40,7 @@ export function CallLog({ calls, limit }: { calls: CallRecord[]; limit: number }
             <div className="flex items-baseline justify-between gap-2">
               <span className="truncate text-ink">
                 {c.purpose}
-                {c.effort ? <span className="text-amber"> {c.effort}</span> : null}
+                {c.effort ? <span className="text-faint"> {c.effort}</span> : null}
               </span>
               <span className={c.status === "ok" ? "text-dim" : "text-alarm"}>{c.status === "ok" ? usd(c.est_cost_usd, 4) : c.status}</span>
             </div>

@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { AlertRow, SubmittedIncident, VerifierResult } from "../api";
 import { go } from "../api";
 import { Lamp } from "./bits";
-import { SevenSeg } from "./SevenSeg";
 
 const HEADER = 62;
 const BIN_GAP = 14;
@@ -120,6 +119,11 @@ export function TileField({
   }, [alerts, columns, hasBins, incidents, step]);
 
   const passed = verdict?.passed;
+  const rootOf = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const incident of incidents ?? []) for (const id of incident.alert_ids) map.set(id, incident.root_cause_device_id);
+    return map;
+  }, [incidents]);
 
   // Movement means one thing: the agent sorted the alerts. Measuring the field or resizing the window is instant.
   const signature = (incidents ?? []).map((i) => `${i.id}:${i.alert_ids.length}`).join("|");
@@ -148,7 +152,7 @@ export function TileField({
             aria-label={`Review ${bin.incident.title}`}
           >
             <span className="flex min-w-0 items-center gap-3">
-              <SevenSeg value={String(bin.count)} height={30} color="#ff3b30" label={`${bin.count} alerts`} />
+              <span className="w-[56px] flex-none text-right font-mono text-[30px] leading-none font-semibold text-alarm tabular-nums">{bin.count}</span>
               <span className="min-w-0">
                 <span className="block truncate text-[16px] font-bold text-ink">{bin.incident.title}</span>
                 <span className="mt-0.5 block truncate font-mono text-[12.5px] text-dim">
@@ -176,7 +180,8 @@ export function TileField({
       {alerts.map((alert) => {
         const place = placements.get(alert.id);
         if (!place) return null;
-        const tone = place.noise ? "is-noise" : place.binned ? "is-critical" : `is-${alert.severity}`;
+        const owner = place.binned && !place.noise ? rootOf.get(alert.id) : undefined;
+        const tone = place.noise ? "is-noise" : place.binned ? (owner === alert.device_id ? "is-critical" : "is-downstream") : `is-${alert.severity}`;
         const corner = Math.max(4, Math.round(tile * 0.26));
         return (
           <div

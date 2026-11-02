@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Status } from "./api";
-import { get, usd } from "./api";
+import { get } from "./api";
 import { Lamp } from "./components/bits";
 import Alerts from "./pages/Alerts";
 import Calls from "./pages/Calls";
@@ -39,9 +39,6 @@ function ModeLamp({ status }: { status: Status | null }) {
         <span className={live ? "text-go" : "text-dim"}>{status.mode === "record" ? "RECORD" : live ? "LIVE" : "REPLAY"}</span>
       </span>
       <span className="hidden text-dim lg:inline">{keyText}</span>
-      <span className="hidden text-dim xl:inline">
-        spent {usd(status.budget.spent, 2)} of {usd(status.budget.total, 0)}
-      </span>
     </div>
   );
 }
