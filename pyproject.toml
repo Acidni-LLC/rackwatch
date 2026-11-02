@@ -1,0 +1,18 @@
+[project]
+name = "rackwatch"
+version = "0.1.0"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+pythonpath = ["backend", "."]
+testpaths = ["backend/tests", "datagen/tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+extend-exclude = ["frontend", "data"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = ["B008", "E501"]

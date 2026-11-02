@@ -1,0 +1,9 @@
+#!/bin/sh
+# Installed with: git config core.hooksPath .githooks
+for py in .venv/Scripts/python.exe .venv/bin/python python3 python; do
+  if command -v "$py" >/dev/null 2>&1 || [ -x "$py" ]; then
+    exec "$py" scripts/secret_scan.py
+  fi
+done
+echo "secret scan: no python found" >&2
+exit 1
