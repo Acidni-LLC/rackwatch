@@ -34,12 +34,20 @@ def encode_image(image: Image.Image, fmt: str = "JPEG") -> str:
     return f"data:image/jpeg;base64,{base64.b64encode(buf.getvalue()).decode()}"
 
 
-def crop_box(image: Image.Image, box: Box, pad: float = CROP_PAD) -> Image.Image:
+def crop_box(image: Image.Image, box: Box, pad: float = CROP_PAD,
+             include_rail: bool = True) -> Image.Image:
+    """Crop around a device box. With ``include_rail`` the crop extends to the
+    left image edge so the printed rail numbers stay readable for u_label.
+    Small boxes are grown to a minimum size so stickers stay legible."""
     w, h = image.size
+    min_half_w, min_half_h = w * 0.18, h * 0.03
     x1, y1, x2, y2 = box
-    dx, dy = (x2 - x1) * pad, (y2 - y1) * pad
-    return image.crop((max(0, int(x1 - dx)), max(0, int(y1 - dy)),
-                       min(w, int(x2 + dx)), min(h, int(y2 + dy))))
+    cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
+    half_w = max((x2 - x1) * (0.5 + pad), min_half_w)
+    half_h = max((y2 - y1) * (0.5 + pad), min_half_h)
+    left = 0 if include_rail else max(0, int(cx - half_w))
+    return image.crop((left, max(0, int(cy - half_h)),
+                       min(w, int(cx + half_w)), min(h, int(cy + half_h))))
 
 
 def thumbnail_with_boxes(image: Image.Image, boxes: list[Box], max_dim: int = 768) -> Image.Image:
@@ -177,8 +185,13 @@ def read_labels(client: Any, image: Image.Image, boxes: list[Box]) -> tuple[dict
             if item.get("crop_id") in crop_ids:
                 merged[item["crop_id"]] = item
     for crop_id, box in zip(crop_ids, boxes, strict=True):
-        item = merged.get(crop_id, {"crop_id": crop_id, "device_type": "other"})
-        if _confidence(item) < CONFIDENCE_THRESHOLD:
+        if crop_id not in merged:
+            reread = True  # the batch dropped this crop: retry once at high effort
+        else:
+            item = merged[crop_id]
+            reread = _confidence(item) < CONFIDENCE_THRESHOLD and (
+                _has_signal(item))
+        if reread:
             items, reread_calls = _label_call(client, image, [(crop_id, box)],
                                               P.REREAD_PROMPT, P.REREAD_SYSTEM, "high")
             calls.extend(reread_calls)
@@ -188,12 +201,37 @@ def read_labels(client: Any, image: Image.Image, boxes: list[Box]) -> tuple[dict
     return merged, calls
 
 
-def _confidence(item: dict) -> float:
+def _has_signal(item: dict) -> bool:
+    """Anything at all read: a fully null read retries nothing better."""
+    if any(item.get(key) is not None for key in READ_FIELDS + ("u_label",)):
+        return True
+    return any(isinstance(v, (int, float)) for v in (item.get("field_confidence") or {}).values())
+
+
+READ_FIELDS = ("make", "model", "serial", "hostname")
+NULL_PENALTY = 0.3  # a null field caps confidence below the review threshold
+PRESENT_DEFAULT = 0.85  # a read field the model left unscored (it returns {} live)
+
+
+def combine_confidence(item: dict) -> float:
+    """Minimum over reported field confidences; every null read field counts
+    as a low score so gaps pull confidence down instead of averaging away.
+    Fields the model read but left unscored count as uncertain, never certain.
+    Nothing read at all scores 0.0."""
     fields = item.get("field_confidence") or {}
-    vals = [v for v in fields.values() if isinstance(v, (int, float))]
-    if vals:
-        return sum(vals) / len(vals)
-    return 1.0 if any(item.get(k) for k in ("make", "model", "serial", "hostname")) else 0.0
+    scores = [float(v) for v in fields.values() if isinstance(v, (int, float))]
+    if not scores and not any(item.get(key) is not None for key in READ_FIELDS):
+        return 0.0
+    for key in READ_FIELDS:
+        if item.get(key) is None:
+            scores.append(NULL_PENALTY)
+        elif key not in fields:
+            scores.append(PRESENT_DEFAULT)
+    return min(scores) if scores else 0.0
+
+
+def _confidence(item: dict) -> float:
+    return combine_confidence(item)
 
 
 def serial_ok(serial: str | None) -> bool:
