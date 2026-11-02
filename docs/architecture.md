@@ -1,5 +1,7 @@
 # Architecture
 
+RackWatch turns a rack photo into a CMDB (configuration management database), then uses it to triage an alert storm for an MSP (managed service provider).
+
 ## The path of one alert storm
 
 ```mermaid
@@ -36,11 +38,11 @@ flowchart LR
 
 ## One door to the model
 
-`backend/app/meta_client.py` is the only code that talks to `api.meta.ai`. Before a request leaves it:
+`backend/app/meta_client.py` is the only code that talks to `api.meta.ai`, Meta's API (application programming interface). Before a request leaves it:
 
-1. **PII guard.** The payload's authored text (instructions, user messages, tool outputs) is scanned. A match refuses the call and logs `refused_pii`. The scrubber should already have caught it, so this is the second lock.
+1. **PII (personally identifiable information) guard.** The payload's authored text (instructions, user messages, tool outputs) is scanned. A match refuses the call and logs `refused_pii`. The scrubber should already have caught it, so this is the second lock.
 2. **Budget guard.** A cost estimate is checked against $1.50 per run and $120 total. A refusal ends the run as `budget_exceeded`; it is not a re-plan.
-3. **Call log.** Every request becomes a row in `calls` and an SSE event: model, purpose, effort, tokens, latency, estimated cost. The key and prompts are not stored, only a SHA-256 digest of the request and at most 500 characters of the response.
+3. **Call log.** Every request becomes a row in `calls` and an SSE (server-sent events) event: model, purpose, effort, tokens, latency, estimated cost. The key and prompts are not stored, only a SHA-256 (Secure Hash Algorithm) digest of the request and at most 500 characters of the response.
 4. **Replay.** In `replay` mode a cassette answers instead of the network, so the app runs with no key. Tools and the verifier still run for real. If a request differs from the recorded one, the entry is served and flagged `diverged`.
 
 `FakeMetaClient` subclasses `MetaClient` and swaps only the transport, so tests exercise the same guards.
@@ -70,3 +72,19 @@ On the seeded rack, the CMDB rows the agent reads are the seed (DESIGN.md §8.2)
 | `frontend/src/` | The console |
 | `scripts/` | Preflight, eval, recording, cost report, task runner |
 | `docs/decisions.md` | Where the build departed from the spec, and why |
+
+## Glossary
+| Term | Meaning |
+|---|---|
+| API | Application programming interface |
+| CMDB | Configuration management database |
+| DNS | Domain Name System |
+| KB | Knowledge base |
+| MSP | Managed service provider |
+| PII | Personally identifiable information |
+| R1–R9 | The verifier's rules, listed in the README |
+| SAM | Segment Anything Model |
+| SHA | Secure Hash Algorithm |
+| SSE | Server-sent events |
+| U | Rack unit |
+| UI | User interface |
