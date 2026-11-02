@@ -130,7 +130,7 @@ def add_voice_note(
             model=settings.spark_model,
             input=WORK_LOG_PROMPT + transcript,
             effort="low",
-            max_output_tokens=600,
+            max_output_tokens=1500,
             store=False,
         )
         line = scrubber.scrub(response.output_text.strip()) or None
