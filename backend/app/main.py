@@ -44,10 +44,11 @@ def settings() -> Settings:
 
 def conn() -> sqlite3.Connection:
     """One connection per thread; WAL lets runs and readers overlap."""
+    path = settings().db_path
     cached = getattr(_local, "conn", None)
-    if cached is None:
-        cached = dbmod.connect(settings().db_path)
-        _local.conn = cached
+    if cached is None or getattr(_local, "path", None) != path:
+        cached = dbmod.connect(path)
+        _local.conn, _local.path = cached, path
     return cached
 
 
