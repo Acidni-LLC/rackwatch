@@ -67,3 +67,15 @@ def test_unmatched_device_joins_the_cmdb_for_a_real_photo(world):
         world.conn.execute("SELECT hostname FROM devices WHERE id = 'dev_A_20'").fetchone()["hostname"]
         == "NEW-SW"
     )
+
+
+def test_span_matched_needs_the_whole_span(tmp_path):
+    seed = tmp_path / "seed.json"
+    seed.write_text(
+        '[{"id": "dev_A_20", "u_start": 20, "u_end": 21}, {"id": "dev_A_12", "u_start": 12, "u_end": 12}]',
+        encoding="utf-8",
+    )
+    devices = [scanned("dev_A_20", 20, 20, "SRV-VOIP01"), scanned("dev_A_12", 12, 12, "SW-ACC-02")]
+    assert rack.span_matched(devices, seed) == 1
+    devices.append(scanned("dev_A_37", 37, 37, "SW-ACC-01"))
+    assert rack.span_matched(devices, seed) == 1

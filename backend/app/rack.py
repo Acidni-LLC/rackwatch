@@ -19,6 +19,17 @@ SAMPLE_IMAGE = DATA_DIR / "rack" / "sample_rack.jpg"
 RACK_ID = "RACK-A"
 
 
+def span_matched(devices: list[Device], seed_path: Path) -> int:
+    """Devices whose whole U span matches the seed. The pipeline's u_matched compares only the bottom unit, so it
+    calls a 2U server at U20-20 correct."""
+    seed = {d["id"]: d for d in json.loads(Path(seed_path).read_text(encoding="utf-8"))}
+    return sum(
+        1
+        for d in devices
+        if d.id in seed and (d.u_start, d.u_end) == (seed[d.id]["u_start"], seed[d.id]["u_end"])
+    )
+
+
 def _seed_match(conn: sqlite3.Connection, device: Device) -> sqlite3.Row | None:
     """The seed row for a scanned device: by id, then by the name or serial on its label."""
     row = conn.execute("SELECT * FROM devices WHERE id = ?", (device.id,)).fetchone()
@@ -88,6 +99,8 @@ def scan_and_store(
         str(seed_path) if seed_path.exists() else None,
         overlay_path=str(RUNS_DIR / f"{run_id}_overlay.png"),
     )
+    if scan.accuracy is not None:
+        scan.accuracy["span_matched"] = span_matched(scan.devices, seed_path)
     scanned = merge_scan(conn, scan, seeded_rack=Path(image_path).resolve() == SAMPLE_IMAGE.resolve())
     conn.execute(
         "INSERT OR REPLACE INTO rack_scans (run_id, rack_id, image_path, image_w, image_h, total_u, overlay_path, accuracy, devices, "

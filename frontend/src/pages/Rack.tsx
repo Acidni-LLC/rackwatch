@@ -168,7 +168,7 @@ export default function Rack({ status }: { status: Status | null }) {
             {rack?.scanned && accuracy ? (
               <>
                 Accuracy vs seed: <span className="text-ink">{accuracy.devices_matched}/{accuracy.devices_total}</span> devices, serial{" "}
-                <span className="text-ink">{accuracy.serial_matched}/{accuracy.devices_total}</span>, U position <span className="text-ink">{accuracy.u_matched}/{accuracy.devices_total}</span>
+                <span className="text-ink">{accuracy.serial_matched}/{accuracy.devices_total}</span>, U span <span className="text-ink">{accuracy.span_matched ?? accuracy.u_matched}/{accuracy.devices_total}</span>
               </>
             ) : rack?.scanned ? (
               `${devices.length} devices from the photo`

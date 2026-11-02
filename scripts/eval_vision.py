@@ -23,7 +23,7 @@ from app import db as dbmod  # noqa: E402
 from app.agent.loop import finish_run, new_run_id, start_run  # noqa: E402
 from app.config import get_settings  # noqa: E402
 from app.meta_client import MetaClient  # noqa: E402
-from app.rack import SAMPLE_IMAGE  # noqa: E402
+from app.rack import SAMPLE_IMAGE, span_matched  # noqa: E402
 from vision.pipeline import run_rack_pipeline  # noqa: E402
 
 
@@ -53,6 +53,7 @@ def main() -> None:
                     "devices": accuracy.get("devices_matched"),
                     "serials": accuracy.get("serial_matched"),
                     "u": accuracy.get("u_matched"),
+                    "span": span_matched(scan.devices, seed),
                     "boxed": len(scan.devices),
                     "needs_review": sum(d.needs_review for d in scan.devices),
                     "seconds": seconds,
@@ -69,6 +70,7 @@ def main() -> None:
         "devices_range": span("devices"),
         "serials_range": span("serials"),
         "u_range": span("u"),
+        "span_range": span("span"),
         "boxed_range": span("boxed"),
         "seconds_mean": round(statistics.mean(r["seconds"] for r in runs), 1),
         "cost_mean_usd": round(statistics.mean(r["cost_usd"] for r in runs), 4),

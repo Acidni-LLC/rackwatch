@@ -57,6 +57,7 @@ export interface RackState {
     devices_total: number;
     serial_matched: number;
     u_matched: number;
+    span_matched?: number;
   } | null;
   run_id: string | null;
 }

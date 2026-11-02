@@ -48,6 +48,7 @@ def fresh(settings, name: str):
 def record_vision(settings, tries: int, min_devices: int) -> None:
     """Scans vary between runs (docs/eval.json has the range). Keeps the first take that meets the bar, and records
     how many takes that needed in meta.json, so the shipped replay is never mistaken for the average."""
+    from app.rack import span_matched  # noqa: PLC0415
     from vision.pipeline import run_rack_pipeline  # noqa: PLC0415
 
     for take in range(1, tries + 1):
@@ -67,6 +68,7 @@ def record_vision(settings, tries: int, min_devices: int) -> None:
         )
         summary = finish_run(conn, run_id, "passed", 1)
         accuracy = scan.accuracy or {}
+        accuracy["span_matched"] = span_matched(scan.devices, run_settings.generated_dir / "cmdb_seed.json")
         print(f"take {take}: {accuracy}", flush=True)
         if accuracy.get("devices_matched", 0) >= min_devices:
             meta = {
