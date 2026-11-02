@@ -18,7 +18,9 @@ import numpy as np
 
 MIN_PAIRS = 4
 INLIER_TOL_U = 0.4  # residual tolerance for inliers, in U
-BAD_FIT_MAD_U = 0.5  # scaled MAD above this flags every device
+BAD_FIT_MAD_U = 1.0  # scaled MAD above this flags every device: a typical pair
+# off by a full unit, far beyond ordinary loose box edges (which sit ~0.5U).
+# Single-device outliers still flag through their own label/span mismatch.
 COVER_FRAC = 0.5  # a unit counts only when the box covers more than half of it
 
 
@@ -144,6 +146,14 @@ def _overlap(lo_a: float, hi_a: float, lo_b: float, hi_b: float) -> float:
     top = max(lo_a, lo_b)
     bottom = min(hi_a, hi_b)
     return max(0.0, bottom - top)
+
+
+def unit_coverage(fit: Fit, y_top: float, y_bottom: float, unit: int) -> float:
+    """Fraction of one rack unit covered by a box (0.0-1.0+), on the fitted line."""
+    unit_h = abs(fit.b)
+    if unit_h <= 0:
+        return 0.0
+    return _overlap(y_top, y_bottom, *unit_span(fit, unit)) / unit_h
 
 
 def snap_box(fit: Fit, u_start: int, u_end: int, left_px: float, right_px: float,

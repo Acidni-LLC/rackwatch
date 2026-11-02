@@ -170,6 +170,92 @@ def gap_seed_boxes(rows: list[list[Box]], image_w: int, image_h: int,
     return sorted(seeds, key=lambda b: (b[1], b[0]))
 
 
+def _seed_box(cx: float, mid: float, half_w: float, half_h: float,
+              image_w: int, image_h: int) -> Box:
+    return (int(max(0, cx - half_w)), int(max(0, mid - half_h)),
+            int(min(image_w - 1, cx + half_w)),
+            int(min(image_h - 1, mid + half_h)))
+
+
+def _spread_seeds(lo_px: float, hi_px: float, unit_px: float,
+                  image_w: int, image_h: int, max_n: int) -> list[Box]:
+    """Evenly spaced narrow seeds across one tall gap, about one per 2U so a
+    multi-device gap is not covered by a single box. Capped at ``max_n``. The
+    spread stays a full unit clear of each bounding row/box so a seed never
+    sits close enough to steal a row box's nearest-seed attribution; gaps too
+    short for that collapse to one middle seed like the inter-row seeder."""
+    if unit_px <= 0 or max_n <= 0 or hi_px <= lo_px:
+        return []
+    cx, half_w = image_w / 2, min(300, image_w * 0.25)
+    half_h = min(0.45 * unit_px, 25)
+    lo, hi = lo_px + unit_px, hi_px - unit_px
+    if hi <= lo:
+        return [_seed_box(cx, (lo_px + hi_px) / 2, half_w, half_h, image_w, image_h)]
+    n = max(1, min(max_n, round((hi - lo) / unit_px / 2)))
+    seeds = [_seed_box(cx, lo + (k + 0.5) * (hi - lo) / n, half_w, half_h,
+                       image_w, image_h) for k in range(n)]
+    return sorted(seeds, key=lambda b: (b[1], b[0]))
+
+
+def edge_gap_seeds(row_cys: list[float], image_w: int, image_h: int,
+                   rail_top_px: float, rail_bottom_px: float, total_u: int,
+                   max_seeds: int = SAM_MAX_OBJECTS) -> list[Box]:
+    """Seeds for the rail-top-to-first-row and last-row-to-rail-bottom edges:
+    stickers the concept pass missed up there leave devices with no row at all,
+    and the inter-row seeder never looks outside the outer rows. Edges wider
+    than 1.75U get spread seeds; anything read from them still has to survive
+    the dead-gap drop, so empty edges cost nothing downstream."""
+    unit = (rail_bottom_px - rail_top_px) / total_u if total_u else 0
+    if unit <= 0 or not row_cys or max_seeds <= 0:
+        return []
+    gaps = sorted(
+        ((hi - lo) / unit, lo, hi)
+        for lo, hi in ((rail_top_px, min(row_cys)), (max(row_cys), rail_bottom_px))
+        if hi > lo and (hi - lo) / unit > 1.75)
+    gaps.sort(key=lambda g: -g[0])  # widest first, budget split by width
+    total_w = sum(w for w, _, _ in gaps)
+    out: list[Box] = []
+    for pos, (w, lo, hi) in enumerate(gaps):
+        remaining = max_seeds - len(out)
+        if remaining <= 0:
+            break
+        share = remaining if pos == len(gaps) - 1 else max(
+            1, round(max_seeds * w / total_w))
+        out.extend(_spread_seeds(lo, hi, unit, image_w, image_h, share))
+    return sorted(out, key=lambda b: (b[1], b[0]))
+
+
+def box_gap_seeds(boxes: list[Box], image_w: int, image_h: int,
+                  rail_top_px: float, rail_bottom_px: float, total_u: int,
+                  max_seeds: int = SAM_MAX_OBJECTS) -> list[Box]:
+    """Gap fill from device boxes alone, for the stickerless grounding path
+    where there are no sticker rows to seed from: every inter-box interval
+    (plus the rail edges) wider than 1.75U gets spread seeds, widest first.
+    Seed boxes are gap-flagged by the caller, so unreadable ones die after the
+    label read. With no boxes at all the whole rail span is seeded, so a scan
+    never silently returns nothing."""
+    unit = (rail_bottom_px - rail_top_px) / total_u if total_u else 0
+    if unit <= 0 or max_seeds <= 0:
+        return []
+    ordered = sorted(boxes, key=lambda b: (b[1], b[0]))
+    gaps: list[tuple[float, float]] = []
+    prev = rail_top_px
+    for b in ordered:
+        gaps.append((prev, b[1]))
+        prev = max(prev, b[3])
+    gaps.append((prev, rail_bottom_px))
+    wide = sorted(((hi - lo) / unit, lo, hi) for lo, hi in gaps
+                  if hi > lo and (hi - lo) / unit > 1.75)
+    wide.sort(key=lambda g: -g[0])
+    out: list[Box] = []
+    for _, lo, hi in wide:
+        out.extend(_spread_seeds(lo, hi, unit, image_w, image_h,
+                                 max_seeds - len(out)))
+        if len(out) >= max_seeds:
+            break
+    return sorted(out, key=lambda b: (b[1], b[0]))
+
+
 def attribute_to_seeds(boxes: list[Box], seed_cys: list[float],
                        seed_is_gap: list[bool]) -> tuple[list[Box], list[bool]]:
     """Attribute each box to its nearest seed row. Returns (boxes, is_gap)."""

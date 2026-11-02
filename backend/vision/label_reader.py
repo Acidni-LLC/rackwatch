@@ -207,22 +207,38 @@ def reread_selected(client: Any, image: Image.Image,
 
 
 READ_FIELDS = ("make", "model", "serial", "hostname")
-NULL_PENALTY = 0.3  # a null field caps confidence below the review threshold
+NULL_PENALTY = 0.3  # a null required field caps confidence below the review threshold
 PRESENT_DEFAULT = 0.85  # a read field the model left unscored (it returns {} live)
+# Device kinds that legitimately carry no plate: their nulls are correct reads,
+# not uncertainty. Make/model are informational everywhere and never required.
+SERIAL_OPTIONAL_TYPES = {"patch_panel", "blank"}
+HOSTNAME_OPTIONAL_TYPES = {"blank"}
+
+
+def _field_required(item: dict, key: str) -> bool:
+    if key in ("make", "model"):
+        return False
+    dtype = item.get("device_type")
+    if key == "serial" and dtype in SERIAL_OPTIONAL_TYPES:
+        return False
+    if key == "hostname" and dtype in HOSTNAME_OPTIONAL_TYPES:
+        return False
+    return True
 
 
 def combine_confidence(item: dict) -> float:
-    """Minimum over reported field confidences; every null read field counts
-    as a low score so gaps pull confidence down instead of averaging away.
-    Fields the model read but left unscored count as uncertain, never certain.
-    Nothing read at all scores 0.0."""
+    """Minimum over reported field confidences; every null *required* field
+    counts as a low score so gaps pull confidence down instead of averaging
+    away. Fields the model read but left unscored count as uncertain, never
+    certain. Nothing read at all scores 0.0."""
     fields = item.get("field_confidence") or {}
     scores = [float(v) for v in fields.values() if isinstance(v, (int, float))]
     if not scores and not any(item.get(key) is not None for key in READ_FIELDS):
         return 0.0
     for key in READ_FIELDS:
         if item.get(key) is None:
-            scores.append(NULL_PENALTY)
+            if _field_required(item, key):
+                scores.append(NULL_PENALTY)
         elif key not in fields:
             scores.append(PRESENT_DEFAULT)
     return min(scores) if scores else 0.0
