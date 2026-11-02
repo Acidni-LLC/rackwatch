@@ -372,7 +372,7 @@ def tool_calls(run_id: str) -> list[dict]:
 
 @app.get("/api/metrics")
 def metrics_route(run_id: str | None = None) -> dict:
-    return metrics.run_metrics(conn(), run_id)
+    return metrics.run_metrics(conn(), run_id, settings().replay_dir)
 
 
 # ---- incidents and the human gate --------------------------------------------------------

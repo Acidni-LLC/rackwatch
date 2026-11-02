@@ -5,6 +5,9 @@ from __future__ import annotations
 import json
 import sqlite3
 from datetime import datetime
+from pathlib import Path
+
+from .replay import cassette_meta
 
 
 def _seconds(start: str | None, end: str | None) -> float | None:
@@ -15,7 +18,7 @@ def _seconds(start: str | None, end: str | None) -> float | None:
     return round((end_at - start_at).total_seconds(), 1)
 
 
-def run_metrics(conn: sqlite3.Connection, run_id: str | None = None) -> dict:
+def run_metrics(conn: sqlite3.Connection, run_id: str | None = None, replay_dir: Path | None = None) -> dict:
     if run_id is None:
         row = conn.execute(
             "SELECT id FROM runs WHERE kind = 'triage' AND status != 'running' ORDER BY started_at DESC LIMIT 1"
@@ -50,7 +53,10 @@ def run_metrics(conn: sqlite3.Connection, run_id: str | None = None) -> dict:
             (run_id,),
         )
     ]
-    # A replay spends nothing, so the card reports what the recorded calls cost when they ran live.
+    # A replay spends nothing and plays back faster, so the card reports what the recorded run actually cost and took.
+    seconds = _seconds(run["started_at"], run["finished_at"])
+    if run["mode"] == "replay" and run["cassette"] and replay_dir is not None:
+        seconds = cassette_meta(replay_dir, run["cassette"]).get("seconds", seconds)
     cost = sum(m["cost_usd"] or 0 for m in by_model)
     count = len(incidents)
     return {
@@ -63,7 +69,7 @@ def run_metrics(conn: sqlite3.Connection, run_id: str | None = None) -> dict:
         "grouping": grouping,
         "cost_usd": round(cost, 4),
         "cost_per_incident": round(cost / count, 4) if count else None,
-        "seconds": _seconds(run["started_at"], run["finished_at"]),
+        "seconds": seconds,
         "tokens_in": sum(m["tokens_in"] or 0 for m in by_model),
         "tokens_cached": sum(m["tokens_cached"] or 0 for m in by_model),
         "tokens_out": sum(m["tokens_out"] or 0 for m in by_model),

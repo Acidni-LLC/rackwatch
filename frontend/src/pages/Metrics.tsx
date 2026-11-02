@@ -58,7 +58,7 @@ export default function MetricsPage({ runId }: { runId: string | null }) {
         <div className="mt-6 flex flex-wrap gap-x-10 gap-y-5">
           <Readout value={f1} label="Grouping F1 vs seeded truth" color="#4be08a" />
           <Readout value={String(m.attempts ?? 0)} label="Verifier attempts" />
-          <Readout value={time} label={m.mode === "replay" ? "Replay time" : "Wall clock"} />
+          <Readout value={time} label={m.mode === "replay" ? "Time when recorded" : "Wall clock"} />
           <Readout value={(m.cost_usd ?? 0).toFixed(2)} label={m.mode === "replay" ? "Est. USD when recorded" : "Est. model cost, USD"} />
           <Readout value={(m.cost_per_incident ?? 0).toFixed(2)} label="Est. USD per incident" />
           <Readout value={String(m.pii_tokens)} label="PII items scrubbed" />

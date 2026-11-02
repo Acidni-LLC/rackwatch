@@ -57,7 +57,7 @@ export default function Alerts({ status }: { status: Status | null }) {
                 Triage live
               </Btn>
               <Btn disabled={starting} onClick={() => start(false, true)} title="First attempt at low effort with a 6-turn cap, which often fails the verifier and forces a re-plan">
-                Live, strict first try
+                Live, rushed first try
               </Btn>
             </>
           ) : null}
