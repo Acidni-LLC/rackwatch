@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import type { CallRecord, Status } from "../api";
 import { clock, compact, get, usd } from "../api";
 import { BudgetBar } from "../components/CallLog";
@@ -34,8 +34,8 @@ export default function Calls({ status }: { status: Status | null }) {
           </thead>
           <tbody>
             {calls.map((c) => (
-              <>
-                <tr key={c.id} className="cursor-pointer border-b border-seam/40 hover:bg-raised" onClick={() => setOpen(open === c.id ? null : c.id)}>
+              <Fragment key={c.id}>
+                <tr className="cursor-pointer border-b border-seam/40 hover:bg-raised" onClick={() => setOpen(open === c.id ? null : c.id)}>
                   <td className="px-2 py-1 text-dim">{clock(c.ts)}</td>
                   <td className="px-2 py-1">{c.model}</td>
                   <td className="px-2 py-1">{c.purpose}</td>
@@ -51,13 +51,13 @@ export default function Calls({ status }: { status: Status | null }) {
                   </td>
                 </tr>
                 {open === c.id ? (
-                  <tr key={`${c.id}-x`}>
+                  <tr>
                     <td colSpan={10} className="bg-black px-3 py-2 whitespace-pre-wrap text-dim">
                       {c.response_excerpt || "(no text)"}
                     </td>
                   </tr>
                 ) : null}
-              </>
+              </Fragment>
             ))}
           </tbody>
         </table>

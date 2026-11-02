@@ -62,7 +62,7 @@ export default function Alerts({ status }: { status: Status | null }) {
               </Btn>
             </>
           ) : null}
-          <Btn tone={liveAvailable ? "plain" : "amber"} disabled={starting || !hasRecording} onClick={() => start(true)} title={hasRecording ? "Replays a recorded run at 4× speed. Tools and the verifier run for real." : "No recording found"}>
+          <Btn tone={liveAvailable ? "plain" : "amber"} disabled={starting || !hasRecording} onClick={() => start(true)} title={hasRecording ? "Replays a recorded run. The tools and the verifier run for real." : "No recording found"}>
             Replay recorded run
           </Btn>
           <button type="button" onClick={() => setSpeed(speed === 4 ? 1 : 4)} className="font-mono text-[12.5px] text-dim hover:text-ink" title="Replay speed">
