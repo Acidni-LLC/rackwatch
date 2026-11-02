@@ -8,6 +8,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+import pytest
 from PIL import Image
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -18,12 +19,22 @@ from vision import prompts as prompts_mod  # noqa: E402
 from vision.label_reader import box_to_u, combine_confidence, crop_box, y_to_u  # noqa: E402
 from vision.overlay import render_overlay  # noqa: E402
 from vision.pipeline import (  # noqa: E402
-    _assign_u,
     build_devices,
     diff_accuracy,
+    drop_dead_gaps,
     drop_tied_gaps,
     rail_edges_px,
+    resolve_with_flags,
     run_rack_pipeline,
+    select_rereads,
+)
+from vision.railfit import (  # noqa: E402
+    Fit,
+    assign_units,
+    fit_rail,
+    frame_fit,
+    theil_sen,
+    unit_at,
 )
 from vision.sam import (  # noqa: E402
     MIN_STICKER_ROWS,
@@ -154,20 +165,23 @@ def test_drop_tied_gaps():
     assert out["b3"] == {"hostname": None}
 
 
-def test_no_reread_when_read_is_fully_null(tmp_path):
-    from vision.label_reader import read_labels
+def test_initial_read_then_capped_reread(tmp_path):
+    from vision.label_reader import read_initial, reread_selected
     image = Image.new("RGB", (W, H), (0, 0, 0))
     null = dict(entry("b0"), make=None, model=None, serial=None, hostname=None,
                 u_label=None, field_confidence={})
     partial = dict(entry("b1"), model=None, field_confidence={"make": 0.9})
     strong = dict(entry("b1"), field_confidence={"make": 0.95, "model": 0.9,
                                                  "serial": 0.9, "u": 0.9})
-    client = FakeMetaClient(script=[fake_text(label_text([null, partial])),
-                                     fake_text(label_text([strong]))])
-    merged, calls = read_labels(client, image, [(10, 0, 390, 100), (10, 200, 390, 300)])
-    assert len(calls) == 2  # batch + one reread for the partial read only
+    client = FakeMetaClient(script=[fake_text(label_text([null, partial]))])
+    merged, calls = read_initial(client, image, [(10, 0, 390, 100), (10, 200, 390, 300)])
+    assert len(calls) == 1  # batches only, never a re-read
     assert merged["b0"]["hostname"] is None
-    assert merged["b1"]["model"] == "Catalyst 9200L-24P"
+    client = FakeMetaClient(script=[fake_text(label_text([strong]))])
+    updates, recalls = reread_selected(
+        client, image, [("b1", (10, 200, 390, 300))])
+    assert len(recalls) == 1
+    assert updates["b1"]["model"] == "Catalyst 9200L-24P"
 
 
 def test_union_by_sticker_merges_splits_only():
@@ -188,42 +202,118 @@ def test_keep_sticker_boxes_and_overlap_resolve():
     assert resolve_overlaps([(0, 200, 10, 300), (0, 0, 10, 100)]) == [(0, 0, 10, 100), (0, 200, 10, 300)]
 
 
-def _chain_reads(specs: list[tuple[int | None, int]]) -> dict[str, dict]:
-    return {f"b{i}": dict(entry(f"b{i}", u=u if u is not None else 12, u_height=h),
-                           u_label=u)
-            for i, (u, h) in enumerate(specs)}
+def test_theil_sen_ignores_outlier():
+    pairs = [(39, 130), (32, 280), (25, 430), (18, 580), (11, 730), (30, 9999.0)]
+    line = theil_sen([p[0] for p in pairs], [p[1] for p in pairs])
+    assert line is not None
+    assert line[1] == -150 / 7  # exact median slope, outlier untouched
+    assert theil_sen([5, 5, 5], [1, 2, 3]) is None  # no x spread
+    assert theil_sen([], []) is None
 
 
-def test_bottom_up_support_chain_snaps_floating_2u():
-    h = 420
+def test_fit_rail_outlier_fallback_and_direction():
+    pairs = [(39, 130), (32, 280), (25, 430), (18, 580), (11, 730), (30, 9999.0)]
+    fit = fit_rail(pairs, 42)
+    assert fit is not None and fit.source == "labels"
+    assert fit.n_pairs == 6 and fit.n_inliers == 5
+    assert not fit.large_residuals
+    assert fit_rail(pairs[:3], 42) is None  # too few pairs
+    assert fit_rail([(1, 100), (2, 200), (3, 300), (4, 400)], 42) is None  # wrong way up
+
+
+def test_fit_rail_returns_none_with_too_few_pairs_even_with_frame():
+    # caller (build_devices) falls back to the frame rails alone here
+    assert fit_rail([(41.0, 500.0)], 42, frame=(100.0, 1900.0)) is None
+    fallback = frame_fit(100.0, 1900.0, 42)
+    assert fallback.source == "frame"
+    assert fallback.a == pytest.approx(1900.0)  # U1 bottom intercept
+    assert unit_at(fallback, 1900.0) == 1
+
+
+def test_fit_rail_arbitration_keeps_exact_line():
+    b = -800.0 / 42
+    pairs = [(float(x), 800.0 + b * x) for x in (41, 40, 39, 38, 37, 36)]
+    fit = fit_rail(pairs, 42, frame=(0.0, 800.0))
+    assert fit is not None
+    assert unit_at(fit, 800.0 + b * 41) == 41  # exact boundary B(41)
+    assert unit_at(fit, 800.0 + b * 36) == 36
+    assert assign_units(fit, 800.0 + b * 42, 800.0 + b * 41) == (42, 42)
+
+
+def test_assign_units_rounds_edges_inward():
+    unit = 800 / 42
+    fit = Fit(a=800.0, b=-unit, total_u=42, n_pairs=5, n_inliers=5,
+              mad_u=0.0, source="labels", large_residuals=False)
+    top12, bot12 = 800 - 12 * unit, 800 - 11 * unit
+    assert assign_units(fit, top12, bot12) == (12, 12)  # exact 1U box
+    assert assign_units(fit, top12, bot12 + 0.1 * unit) == (12, 12)  # 0.1U dip forgiven
+    top20, bot20 = 800 - 21 * unit, 800 - 19 * unit
+    assert assign_units(fit, top20, bot20) == (20, 21)  # exact 2U box
+    assert assign_units(fit, -50, 900) == (1, 42)  # clamped at the rails
+
+
+def test_build_devices_uses_fit_and_flags_disagreement():
+    unit = 800 / 42
+    fit = Fit(a=800.0, b=-unit, total_u=42, n_pairs=5, n_inliers=5,
+              mad_u=0.0, source="labels", large_residuals=False)
     frame = json.loads(frame_text())
-    boxes = [(0, 330, 399, 350), (0, 360, 399, 380), (0, 380, 399, 400), (0, 400, 399, 420)]
-    reads = _chain_reads([(7, 2), (4, 2), (3, 2), (1, 1)])
-    devices = build_devices("RACK-A", "img.jpg", boxes, frame, reads, h)
-    assert [(d.id, d.u_start, d.u_end) for d in devices] == [
-        ("dev_A_06", 6, 7), ("dev_A_04", 4, 5), ("dev_A_02", 2, 3), ("dev_A_01", 1, 1)]
-    assert [d.needs_review for d in devices] == [True, False, True, False]
+    top12, bot12 = int(800 - 12 * unit), int(800 - 11 * unit)
+    boxes = [(0, top12, 399, bot12), (0, top12, 399, bot12)]
+    reads = {"b0": entry("b0", u=12), "b1": entry("b1", u=30)}
+    devices = build_devices("RACK-A", "img.jpg", boxes, frame, reads, 800, fit)
+    assert [d.id for d in devices] == ["dev_A_12", "dev_A_12"]
+    assert [d.needs_review for d in devices] == [False, True]
+    bad_fit = fit._replace(large_residuals=True)
+    flagged = build_devices("RACK-A", "img.jpg", boxes, frame, reads, 800, bad_fit)
+    assert all(d.needs_review for d in flagged)
 
 
-def test_assign_u_giant_reanchors_and_gap_falls_back():
-    assert _assign_u({"computed": (19, 23), "u_label": 21, "u_height": 1, "tall": True},
-                     None) == (20, 21, True)
-    assert _assign_u({"computed": (30, 30), "u_label": 30, "u_height": 1, "tall": False},
-                     (21, 21)) == (30, 30, False)
-    assert _assign_u({"computed": (16, 16), "u_label": 16, "u_height": 1, "tall": False},
-                     None) == (16, 16, False)
+def test_build_devices_falls_back_to_frame_without_fit():
+    frame = json.loads(frame_text())
+    devices = build_devices("RACK-A", "img.jpg", [(0, 700, 399, 780)], frame, {}, 800)
+    assert len(devices) == 1  # empty read still builds from the frame line
+    assert devices[0].needs_review  # nothing read: uncertain
 
 
-def test_assign_u_label_beats_geometry_on_disagreement():
-    make = {"computed": (15, 17), "u_height": 1, "tall": False}
-    assert _assign_u(make | {"u_label": 16}, (12, 12)) == (16, 16, True)
-    assert _assign_u(make | {"u_label": 16}, None) == (16, 16, True)
-    ups = {"computed": (2, 3), "u_label": 3, "u_height": 2, "tall": False}
-    assert _assign_u(ups, (5, 6)) == (2, 3, True)  # gap below: label-top 2U span
-    nas = {"computed": (3, 5), "u_label": 4, "u_height": 2, "tall": False}
-    assert _assign_u(nas, (2, 3)) == (4, 5, True)  # stack supports label-as-bottom
-    assert _assign_u({"computed": (9, 9), "u_label": None, "u_height": 1, "tall": False},
-                     None) == (9, 9, True)
+def test_drop_dead_gaps_removes_unreadable_and_remaps():
+    boxes = [(0, 0, 10, 100), (0, 60, 10, 160), (0, 200, 10, 300)]
+    is_gap = [False, True, False]
+    reads = {"b0": entry("b0"), "b1": {}, "b2": entry("b2")}
+    kept, flags, remapped = drop_dead_gaps(boxes, is_gap, reads)
+    assert kept == [(0, 0, 10, 100), (0, 200, 10, 300)]
+    assert flags == [False, False]
+    assert list(remapped) == ["b0", "b1"]  # row-2 read moved down
+    assert remapped["b1"]["crop_id"] == "b2"
+    resolved, _ = resolve_with_flags(kept, flags)
+    assert resolved[0] == (0, 0, 10, 100)  # dead gap never clipped it
+    # a gap box with its own hostname survives
+    live = dict(reads)
+    live["b1"] = entry("b1")
+    assert drop_dead_gaps(boxes, is_gap, live)[0] == boxes
+
+
+def test_reread_selected_batches_jobs_into_one_call(tmp_path):
+    from vision.label_reader import reread_selected
+    image = Image.new("RGB", (W, H), (0, 0, 0))
+    jobs = [(f"b{i}", (10, i * 150, 390, i * 150 + 100)) for i in range(3)]
+    client = FakeMetaClient(script=[
+        fake_text(label_text([entry(f"b{i}", conf=0.95) for i in range(3)]))])
+    updates, calls = reread_selected(client, image, jobs)
+    assert len(calls) == 1  # one shared high-effort call, not three
+    assert sorted(updates) == ["b0", "b1", "b2"]
+    assert client.requests[0]["reasoning"] == {"effort": "high"}
+
+
+def test_select_rereads_doubt_first_then_serials_capped():
+    fit = Fit(a=800.0, b=-800.0 / 42, total_u=42, n_pairs=8, n_inliers=8,
+              mad_u=0.0, source="labels", large_residuals=False)
+    boxes = [(0, 700 - 40 * i, 399, 738 - 40 * i) for i in range(8)]
+    reads = {}
+    for i in range(8):
+        lo, _hi = assign_units(fit, boxes[i][1], boxes[i][3])
+        reads[f"b{i}"] = dict(entry(f"b{i}", u=lo), serial=None)
+    reads["b7"] = dict(entry("b7", u=99), serial="JAE24190LQ2")
+    assert select_rereads(boxes, reads, fit) == [7, 0, 1, 2, 3, 4]
 
 
 def test_rail_edges_and_min_confidence_and_rail_crop(tmp_path):
@@ -375,8 +465,9 @@ def test_pipeline_fallback_grounding_then_box_prompt(tmp_path):
 def test_low_confidence_reread_at_high_effort(tmp_path):
     image = make_image(tmp_path / "rack.jpg")
     boxes = [(10, i * 150, 390, i * 150 + 140) for i in range(4)]
-    weak = [entry(f"b{i}", conf=0.95) for i in range(4)]
-    weak[0] = entry("b0", conf=0.2, serial=None, make=None, model=None, hostname=None)
+    weak = [entry(f"b{i}", u=40 - i * 7, conf=0.95) for i in range(4)]
+    weak[0] = entry("b0", u=40, conf=0.2, serial=None, make=None, model=None,
+                    hostname=None)
     strong = entry("b0", conf=0.95)
     client = FakeMetaClient(script=[
         fake_text(frame_text()),
