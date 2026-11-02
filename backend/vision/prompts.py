@@ -14,11 +14,13 @@ STICKER_PROMPT = "white label"
 RACK_FRAME_SYSTEM = "You are reading a photo of a server rack. Return JSON only."
 
 RACK_FRAME_PROMPT = (
-    "Return {rail_top_y, rail_bottom_y, total_u, rail_numbers_visible:bool, "
-    "rack_label:string|null}. "
+    "Return {rail_top_y, rail_bottom_y, rail_left_x, rail_right_x, total_u, "
+    "rail_numbers_visible:bool, rack_label:string|null}. "
     "rail_top_y is the y of the top edge of the highest-numbered rack unit, "
     "rail_bottom_y is the y of the bottom edge of unit 1. Read them off the "
     "numbered rails on the left and right sides, not the outer rack frame. "
+    "rail_left_x and rail_right_x are the x of the left and right rail "
+    "interiors (the uprights the devices mount between). "
     "Coordinates are on a normalized 0-1000 grid over this image "
     "(0,0 is the top-left, 1000,1000 the bottom-right), not pixels."
 )
@@ -103,11 +105,14 @@ FRAME_JSON_SCHEMA = {
     "properties": {
         "rail_top_y": {"type": "number"},
         "rail_bottom_y": {"type": "number"},
+        "rail_left_x": {"type": "number"},
+        "rail_right_x": {"type": "number"},
         "total_u": {"type": "number"},
         "rail_numbers_visible": {"type": "boolean"},
         "rack_label": {"type": ["string", "null"]},
     },
-    "required": ["rail_top_y", "rail_bottom_y", "total_u", "rail_numbers_visible", "rack_label"],
+    "required": ["rail_top_y", "rail_bottom_y", "rail_left_x", "rail_right_x",
+                 "total_u", "rail_numbers_visible", "rack_label"],
 }
 
 GROUNDING_JSON_SCHEMA = {

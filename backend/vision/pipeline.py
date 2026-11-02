@@ -8,7 +8,10 @@ stickers; sticker containment, NMS and overlap resolve; rail-anchored frame
 call; batched label reads; one robust rail line fit from all rail reads so a
 single bad read cannot shift a device; at most one batch of high-effort
 re-reads for fit-doubtful or serial-less crops; U assignment from the single
-line; overlay; optional accuracy diff against ``cmdb_seed.json``.
+line (half-coverage per unit); implausible boxes take their span from their
+own label read; decided bboxes snap to the fitted grid inside the rails
+(SAM still finds the devices, the boxes are only snapped afterwards);
+overlay; optional accuracy diff against ``cmdb_seed.json``.
 """
 
 from __future__ import annotations
@@ -40,6 +43,7 @@ from vision.railfit import (
     fit_rail,
     frame_fit,
     label_pairs,
+    snap_box,
 )
 from vision.sam import (
     MIN_STICKER_ROWS,
@@ -49,6 +53,7 @@ from vision.sam import (
     cluster_rows,
     concept_input,
     contains,
+    fallback_row_boxes,
     filter_narrow,
     gap_seed_boxes,
     keep_sticker_boxes,
@@ -87,14 +92,17 @@ def _row_centroid(row: list) -> tuple[float, float]:
 
 def segment_devices(client: Any, image_url: str, image_w: int, image_h: int,
                     rail_top_px: float, rail_bottom_px: float,
-                    total_u: int) -> tuple[list, list[str], list[bool]]:
+                    total_u: int, rail_left_px: float | None = None,
+                    rail_right_px: float | None = None) -> tuple[list, list[str], list[bool]]:
     """Sticker rows seed tight SAM prompts; wide inter-row gaps get seeds too
     in case a sticker was missed. Multi-row boxes are split, same-sticker
-    splits merged, stickerless row boxes dropped. Returns (boxes, call_ids,
-    is_gap), sorted top-to-bottom but with overlaps unresolved: the caller
-    drops unreadable gap boxes first (after the label reads), then resolves,
-    so a box that will be dropped can never clip a real neighbor. Concept +
-    grounding fallbacks cover stickerless racks.
+    splits merged, stickerless row boxes dropped. Rows the segmenter still
+    misses get a last-resort fallback box, so a scan never silently loses a
+    stickered device. Returns (boxes, call_ids, is_gap), sorted top-to-bottom
+    but with overlaps unresolved: the caller drops unreadable gap boxes first
+    (after the label reads), then resolves, so a box that will be dropped can
+    never clip a real neighbor. Concept + grounding fallbacks cover
+    stickerless racks.
     """
     calls: list[str] = []
     stickers = _sam_concept(client, image_url, image_w, image_h, P.STICKER_PROMPT, calls)
@@ -124,6 +132,10 @@ def segment_devices(client: Any, image_url: str, image_w: int, image_h: int,
         is_gap.extend([False] * (len(boxes) - len(is_gap)))
         if boxes:
             boxes, is_gap = nms_with_flags(boxes, is_gap)
+            boxes.extend(fallback_row_boxes(rows, boxes, image_w, image_h,
+                                            rail_left_px, rail_right_px,
+                                            rail_top_px, rail_bottom_px, total_u))
+            is_gap.extend([False] * (len(boxes) - len(is_gap)))
             order = sorted(range(len(boxes)), key=lambda i: (boxes[i][1], boxes[i][0]))
             return [boxes[i] for i in order], calls, [is_gap[i] for i in order]
     boxes = filter_narrow(_sam_concept(client, image_url, image_w, image_h,
@@ -133,12 +145,6 @@ def segment_devices(client: Any, image_url: str, image_w: int, image_h: int,
                               image_w)
     boxes = nms(boxes)
     return boxes, calls, [False] * len(boxes)
-    boxes = filter_narrow(_sam_concept(client, image_url, image_w, image_h,
-                                       P.CONCEPT_PROMPTS[0], calls), image_w)
-    if len(boxes) < 4:
-        boxes = filter_narrow(_grounded_boxes(client, image_url, image_w, image_h, calls),
-                              image_w)
-    return resolve_overlaps(nms(boxes)), calls, [False] * len(boxes)
 
 
 def _grounded_boxes(client: Any, image_url: str, image_w: int, image_h: int,
@@ -233,28 +239,122 @@ def select_rereads(boxes: list, reads: dict[str, dict], fit: Fit | None,
     return ordered[:max_n]
 
 
+def rail_x_px(frame: dict, image_w: int) -> tuple[float, float] | None:
+    """Rail-anchored horizontal extent in pixels; None when the frame call
+    did not return rail x positions (older prompts)."""
+    try:
+        left = float(frame["rail_left_x"]) * image_w / 1000
+        right = float(frame["rail_right_x"]) * image_w / 1000
+    except (KeyError, TypeError, ValueError):
+        return None
+    if not (0 <= left < right <= image_w):
+        return None
+    return left, right
+
+
+def box_height_u(box: list, fit: Fit) -> float:
+    """Box height measured in rack units on the fitted line."""
+    return (box[3] - box[1]) / abs(fit.b) if fit.b else 0.0
+
+
+def is_implausible_box(box: list, fit: Fit, median_h_u: float,
+                       rails_x: tuple[float, float] | None,
+                       rail_top_px: float, rail_bottom_px: float) -> bool:
+    """A box SAM got plainly wrong: past the rack frame, wider than the rack,
+    or far taller than its neighbors. Thresholds are relative to this scan's
+    own rails and boxes, never to a fixed layout."""
+    unit = abs(fit.b)
+    if unit <= 0:
+        return False
+    if rails_x is not None:
+        left, right = rails_x
+        interior = right - left
+        if interior > 0:
+            if box[0] < left - 0.05 * interior or box[2] > right + 0.05 * interior:
+                return True
+            if (box[2] - box[0]) > 1.15 * interior:
+                return True
+    if box[1] < rail_top_px - 0.5 * unit or box[3] > rail_bottom_px + 0.5 * unit:
+        return True
+    return box_height_u(box, fit) > max(3.5, 2.5 * median_h_u)
+
+
+def _valid_height(raw: Any) -> int | None:
+    if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+        return None
+    return int(raw) if 1 <= int(raw) <= 8 else None
+
+
+def _clamp_box(box: list, rails_x: tuple[float, float] | None,
+               rail_top_px: float, rail_bottom_px: float,
+               image_w: int, image_h: int) -> list:
+    """Hard frame clamp: no box may extend outside the rack frame. Clamping
+    only pulls edges back inside; it never reshapes a box to look right."""
+    x1, y1, x2, y2 = (float(v) for v in box)
+    if rails_x is not None:
+        x1 = max(x1, rails_x[0])
+        x2 = min(x2, rails_x[1])
+    x1 = max(0.0, min(float(image_w - 1), x1))
+    x2 = max(x1 + 1, min(float(image_w), x2))
+    y1 = max(max(0.0, rail_top_px), min(float(image_h - 1), y1))
+    y2 = max(y1 + 1, min(min(float(image_h), rail_bottom_px), y2))
+    return [int(round(x1)), int(round(y1)), int(round(x2)), int(round(y2))]
+
+
 def build_devices(rack_id: str, image_path: str, boxes: list, frame: dict,
-                  reads: dict[str, dict], image_h: int, fit: Fit | None = None) -> list[Device]:
+                  reads: dict[str, dict], image_h: int, fit: Fit | None = None,
+                  image_w: int | None = None) -> list[Device]:
     """U assignment from one global rail line: every device's top and bottom
     edges map through the same fit, so one bad read cannot shift its device
-    (or any other). Without a fit the frame rails serve as the line."""
+    (or any other). Each unit counts only past half coverage, so a loose edge
+    crossing a rail line by a sliver adds no U. Without a fit the frame rails
+    serve as the line. A box the segmenter got plainly wrong (past the frame
+    or far taller than its neighbors) takes its span from its own u_label
+    read instead and is flagged. Decided boxes are snapped to the grid: y
+    from the fitted line, x across the rail interior. A box whose U
+    disagrees with its label keeps its SAM box (clamped inside the frame) so
+    a wrong U stays visibly wrong."""
     total_u = int(frame.get("total_u") or 42)
     if fit is None:
         top, bottom = rail_edges_px(frame, image_h)
         fit = frame_fit(top, bottom, total_u)
+    rail_top, rail_bottom = rail_edges_px(frame, image_h)
+    rails_x = rail_x_px(frame, image_w) if image_w else None
+    heights = sorted(box_height_u(b, fit) for b in boxes)
+    median_h = float(heights[len(heights) // 2]) if heights else 1.0
+    if median_h <= 0:
+        median_h = 1.0
     devices: list[Device] = []
     for i, box in enumerate(boxes):
         item = reads.get(f"b{i}", {})
         u_start, u_end = assign_units(fit, box[1], box[3])
         u_label = _int_or_none(item.get("u_label"))
+        implausible = is_implausible_box(box, fit, median_h, rails_x,
+                                         rail_top, rail_bottom)
+        disagrees = u_label is not None and (u_label < u_start or u_label > u_end)
         needs_review = fit.large_residuals
-        if u_label is not None and (u_label < u_start or u_label > u_end):
+        if implausible and u_label is not None and 1 <= u_label <= total_u:
+            height = _valid_height(item.get("u_height")) or 1
+            u_start, u_end = u_label, min(total_u, u_label + height - 1)
+            disagrees = False
             needs_review = True
+        elif implausible or disagrees:
+            needs_review = True
+        out_box: list = list(box)
+        if rails_x is not None and image_w:
+            if disagrees:
+                out_box = _clamp_box(box, rails_x, rail_top, rail_bottom,
+                                     image_w, image_h)
+            else:
+                snapped = list(snap_box(fit, u_start, u_end, rails_x[0], rails_x[1],
+                                        image_w, image_h))
+                out_box = _clamp_box(snapped, rails_x, rail_top, rail_bottom,
+                                     image_w, image_h)
         confidence = combine_confidence(item)
         serial = item.get("serial")
         if confidence < 0.6 or not serial_ok(serial):
             needs_review = True
-        devices.append(_make_device(rack_id, image_path, item, box, u_start, u_end,
+        devices.append(_make_device(rack_id, image_path, item, out_box, u_start, u_end,
                                     confidence, needs_review))
     return devices
 
@@ -354,9 +454,11 @@ def run_rack_pipeline(image_path: str, client: Any, rack_id: str = "RACK-A",
     frame, frame_call = read_rack_frame(client, image_url)
     calls.append(frame_call)
     rail_top, rail_bottom = rail_edges_px(frame, h)
+    rails_x = rail_x_px(frame, w)
 
     boxes, seg_calls, is_gap = segment_devices(
-        client, image_url, w, h, rail_top, rail_bottom, int(frame.get("total_u") or 42))
+        client, image_url, w, h, rail_top, rail_bottom, int(frame.get("total_u") or 42),
+        *(rails_x or (None, None)))
     calls.extend(seg_calls)
 
     reads, batch_calls = read_initial(client, image, boxes)
@@ -375,7 +477,7 @@ def run_rack_pipeline(image_path: str, client: Any, rack_id: str = "RACK-A",
         reads.update(updates)
         fit = fit_rail(label_pairs(boxes, reads), total_u, frame=rails) or fit
 
-    devices = [d for d in build_devices(rack_id, image_path, boxes, frame, reads, h, fit)
+    devices = [d for d in build_devices(rack_id, image_path, boxes, frame, reads, h, fit, w)
                if d.confidence > 0.0]
     accuracy = diff_accuracy(devices, seed_path) if seed_path else None
 

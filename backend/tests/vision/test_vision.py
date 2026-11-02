@@ -23,7 +23,9 @@ from vision.pipeline import (  # noqa: E402
     diff_accuracy,
     drop_dead_gaps,
     drop_tied_gaps,
+    is_implausible_box,
     rail_edges_px,
+    rail_x_px,
     resolve_with_flags,
     run_rack_pipeline,
     select_rereads,
@@ -33,6 +35,7 @@ from vision.railfit import (  # noqa: E402
     assign_units,
     fit_rail,
     frame_fit,
+    snap_box,
     theil_sen,
     unit_at,
 )
@@ -42,6 +45,7 @@ from vision.sam import (  # noqa: E402
     attribute_to_seeds,
     box_prompt_text,
     cluster_rows,
+    fallback_row_boxes,
     filter_narrow,
     gap_seed_boxes,
     iou,
@@ -530,6 +534,95 @@ def test_overlay_renders_png(tmp_path):
                             "hostname": "SW-ACC-02"}], out)
     with Image.open(out) as im:
         assert im.size == (W, H)
+
+
+def frame_with_rails(top=0, bottom=1000, left=200, right=800, total=42) -> dict:
+    return {"rail_top_y": top, "rail_bottom_y": bottom,
+            "rail_left_x": left, "rail_right_x": right, "total_u": total,
+            "rail_numbers_visible": True, "rack_label": "RACK-A"}
+
+
+def test_assign_units_needs_half_coverage():
+    unit = 800 / 42
+    fit = Fit(a=800.0, b=-unit, total_u=42, n_pairs=5, n_inliers=5,
+              mad_u=0.0, source="labels", large_residuals=False)
+    top12, bot12 = 800 - 12 * unit, 800 - 11 * unit
+    assert assign_units(fit, top12, bot12) == (12, 12)  # exact 1U box
+    assert assign_units(fit, top12, bot12 + 0.4 * unit) == (12, 12)  # 0.4U sliver adds no U
+    assert assign_units(fit, top12, bot12 + 0.6 * unit) == (11, 12)  # 0.6U overlap counts
+    assert assign_units(fit, top12 - 0.4 * unit, bot12) == (12, 12)  # sliver above either side
+    top20, bot20 = 800 - 21 * unit, 800 - 19 * unit
+    assert assign_units(fit, top20, bot20) == (20, 21)  # exact 2U box
+    mid = 800 - 11 * unit  # boundary B(11) between units 11 and 12
+    assert assign_units(fit, mid - 0.15 * unit, mid + 0.15 * unit) == (11, 11)  # center fallback
+    assert assign_units(fit, -50, 900) == (1, 42)  # clamped at the rails
+
+
+def test_implausible_box_takes_label_span_and_flags_review():
+    unit = 800 / 42
+    fit = Fit(a=800.0, b=-unit, total_u=42, n_pairs=8, n_inliers=8,
+              mad_u=0.0, source="labels", large_residuals=False)
+    frame = frame_with_rails()
+    rails = rail_x_px(frame, W)
+    assert rails == (80.0, 320.0)
+    top12, bot12 = int(800 - 12 * unit), int(800 - 11 * unit)
+    top30, bot30 = int(800 - 30 * unit), int(800 - 29 * unit)
+    wide = (0, 100, 399, 700)  # runs past the rails onto the wall, ~31U tall
+    assert is_implausible_box(wide, fit, 1.0, rails, 0.0, 800.0)
+    assert not is_implausible_box((100, top12, 300, bot12), fit, 1.0, rails, 0.0, 800.0)
+    boxes = [(100, top12, 300, bot12), (100, top30, 300, bot30), wide]
+    reads = {"b0": entry("b0", u=12, u_height=1),
+             "b1": entry("b1", u=30, u_height=1),
+             "b2": entry("b2", u=20, u_height=2)}
+    devices = build_devices("RACK-A", "img.jpg", boxes, frame, reads, H, fit, W)
+    assert [d.u_start for d in devices] == [12, 30, 20]
+    assert [d.u_end for d in devices] == [12, 30, 21]
+    assert [d.id for d in devices] == ["dev_A_12", "dev_A_30", "dev_A_20"]
+    assert [d.needs_review for d in devices] == [False, False, True]
+    snapped = [(d.bbox.x1, d.bbox.y1, d.bbox.x2, d.bbox.y2) for d in devices]
+    assert snapped[0] == (80, top12, 320, bot12)  # y from the fit, x across the rails
+    assert snapped[2] == (80, 400, 320, 438)  # span came from the label, then snapped
+    for x1, y1, x2, y2 in snapped:  # no box may extend outside the rack frame
+        assert 80 <= x1 < x2 <= 320
+        assert 0 <= y1 < y2 <= 800
+
+
+def test_disagreement_keeps_sam_box_visibly_wrong():
+    unit = 800 / 42
+    fit = Fit(a=800.0, b=-unit, total_u=42, n_pairs=8, n_inliers=8,
+              mad_u=0.0, source="labels", large_residuals=False)
+    frame = frame_with_rails()
+    top12, bot12 = int(800 - 12 * unit), int(800 - 11 * unit)
+    sam_box = (100, top12, 300, bot12)
+    devices = build_devices("RACK-A", "img.jpg", [sam_box], frame,
+                            {"b0": entry("b0", u=30)}, H, fit, W)
+    assert devices[0].u_start == 12  # the fit decides, not the bad label
+    assert devices[0].needs_review
+    kept = (devices[0].bbox.x1, devices[0].bbox.y1,
+            devices[0].bbox.x2, devices[0].bbox.y2)
+    assert kept == sam_box  # never adjusted to look right when the U disagrees
+
+
+def test_snap_box_stays_inside_frame():
+    unit = 800 / 42
+    fit = Fit(a=800.0, b=-unit, total_u=42, n_pairs=5, n_inliers=5,
+              mad_u=0.0, source="labels", large_residuals=False)
+    assert snap_box(fit, 12, 12, 80.0, 320.0, W, H) == (
+        80, int(800 - 12 * unit), 320, int(800 - 11 * unit))
+    assert snap_box(fit, 1, 42, 80.0, 320.0, W, H) == (80, 0, 320, 800)
+    assert rail_x_px({"rail_top_y": 0}, W) is None  # older frame without rail x
+    assert rail_x_px(frame_with_rails(left=900, right=100), W) is None  # degenerate
+
+
+def test_fallback_row_boxes_cover_orphan_rows_only():
+    rows = [[(300, 90, 360, 110)], [(300, 500, 360, 520)]]
+    covered = [(10, 50, 390, 150)]
+    extra = fallback_row_boxes(rows, covered, W, H, 80.0, 380.0, 0.0, 800.0, 42)
+    assert len(extra) == 1  # the second row had no box
+    x1, y1, x2, y2 = extra[0]
+    assert x1 >= 80 and x2 <= 380 and y1 >= 0 and y2 <= 800
+    assert x1 <= 330 <= x2 and y1 <= 510 <= y2  # covers the orphan sticker
+    assert fallback_row_boxes(rows, covered + extra, W, H) == []  # no orphans left
 
 
 def test_video_picks_sharpest_frame(tmp_path):
