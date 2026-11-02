@@ -86,7 +86,7 @@ export default function Rack({ status }: { status: Status | null }) {
   const height = (rack?.scanned && rack.image_h) || natural?.h || 1;
 
   return (
-    <div className="grid h-full min-h-0 grid-cols-1 gap-3 p-3 lg:grid-cols-[minmax(0,460px)_minmax(0,1fr)]">
+    <div className="grid h-full min-h-0 grid-cols-1 gap-3 p-3 lg:grid-cols-[minmax(0,540px)_minmax(0,1fr)]">
       <section className="chassis relative flex min-h-0 flex-col">
         <div className="flex flex-none flex-wrap items-center justify-between gap-2 border-b border-seam px-3 py-2">
           <span className="tag">RACK-A PHOTO</span>
