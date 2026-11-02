@@ -1,20 +1,16 @@
 {
   "kind": "vision",
-  "recorded_at": "2026-11-02T15:25:31-0500",
-  "takes": 3,
-  "seconds": 190.3,
-  "cost_usd": 0.170343,
+  "recorded_at": "2026-11-02T18:25:32-0500",
+  "takes": 4,
+  "seconds": 136.0,
+  "cost_usd": 0.066648,
   "accuracy": {
-    "devices_matched": 13,
+    "devices_matched": 14,
     "devices_total": 14,
-    "serial_matched": 11,
-    "u_matched": 13,
-    "extra_devices": [
-      "dev_A_07"
-    ],
-    "missing_devices": [
-      "dev_A_06"
-    ]
+    "serial_matched": 12,
+    "u_matched": 14,
+    "extra_devices": [],
+    "missing_devices": []
   },
   "devices": 14
 }
