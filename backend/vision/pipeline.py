@@ -5,8 +5,10 @@ returns a validated ``RackScanResult``. Flow: SAM sticker pass (one tight box
 per asset sticker) seeding per-row SAM box prompts, with the §8.1 concept
 prompt and Spark-grounding + SAM box-prompt fallback when the rack carries no
 stickers; sticker containment, NMS and overlap resolve; rail-anchored frame
-call; batched label reads with high-effort re-reads; deterministic U mapping;
-overlay; optional accuracy diff against ``cmdb_seed.json``.
+call; batched label reads; one robust rail line fit from all rail reads so a
+single bad read cannot shift a device; at most one batch of high-effort
+re-reads for fit-doubtful or serial-less crops; U assignment from the single
+line; overlay; optional accuracy diff against ``cmdb_seed.json``.
 """
 
 from __future__ import annotations
@@ -22,16 +24,23 @@ from PIL import Image
 
 from vision import prompts as P
 from vision.label_reader import (
-    box_to_u,
     coerce_device_type,
     combine_confidence,
     encode_image,
     ground_devices,
-    read_labels,
+    read_initial,
     read_rack_frame,
+    reread_selected,
     serial_ok,
 )
 from vision.overlay import render_overlay
+from vision.railfit import (
+    Fit,
+    assign_units,
+    fit_rail,
+    frame_fit,
+    label_pairs,
+)
 from vision.sam import (
     MIN_STICKER_ROWS,
     SAM_MAX_OBJECTS,
@@ -82,8 +91,10 @@ def segment_devices(client: Any, image_url: str, image_w: int, image_h: int,
     """Sticker rows seed tight SAM prompts; wide inter-row gaps get seeds too
     in case a sticker was missed. Multi-row boxes are split, same-sticker
     splits merged, stickerless row boxes dropped. Returns (boxes, call_ids,
-    is_gap), sorted top-to-bottom with overlaps resolved. Concept + grounding
-    fallbacks cover stickerless racks.
+    is_gap), sorted top-to-bottom but with overlaps unresolved: the caller
+    drops unreadable gap boxes first (after the label reads), then resolves,
+    so a box that will be dropped can never clip a real neighbor. Concept +
+    grounding fallbacks cover stickerless racks.
     """
     calls: list[str] = []
     stickers = _sam_concept(client, image_url, image_w, image_h, P.STICKER_PROMPT, calls)
@@ -114,9 +125,14 @@ def segment_devices(client: Any, image_url: str, image_w: int, image_h: int,
         if boxes:
             boxes, is_gap = nms_with_flags(boxes, is_gap)
             order = sorted(range(len(boxes)), key=lambda i: (boxes[i][1], boxes[i][0]))
-            boxes, is_gap = [boxes[i] for i in order], [is_gap[i] for i in order]
-            boxes = resolve_overlaps(boxes)
-            return boxes, calls, is_gap
+            return [boxes[i] for i in order], calls, [is_gap[i] for i in order]
+    boxes = filter_narrow(_sam_concept(client, image_url, image_w, image_h,
+                                       P.CONCEPT_PROMPTS[0], calls), image_w)
+    if len(boxes) < 4:
+        boxes = filter_narrow(_grounded_boxes(client, image_url, image_w, image_h, calls),
+                              image_w)
+    boxes = nms(boxes)
+    return boxes, calls, [False] * len(boxes)
     boxes = filter_narrow(_sam_concept(client, image_url, image_w, image_h,
                                        P.CONCEPT_PROMPTS[0], calls), image_w)
     if len(boxes) < 4:
@@ -189,77 +205,62 @@ def _int_or_none(value: Any) -> int | None:
         return None
 
 
-def build_devices(rack_id: str, image_path: str, boxes: list, frame: dict,
-                  reads: dict[str, dict], image_h: int) -> list[Device]:
-    """Bottom-up U assignment. Devices stack: a box floating exactly 1U above
-    a confident neighbor below, reading 2U tall, snaps down onto the stack.
-    Giant single boxes re-anchor to their rail label. Gaps fall back to the
-    label-then-geometry rules."""
-    total_u = int(frame.get("total_u") or 42)
-    top, bottom = rail_edges_px(frame, image_h)
-    unit_px = (bottom - top) / total_u if total_u else 1
-    parsed = []
+MAX_REREADS = 6  # at most one batch of slow high-effort re-reads per scan
+
+
+def select_rereads(boxes: list, reads: dict[str, dict], fit: Fit | None,
+                   max_n: int = MAX_REREADS) -> list[int]:
+    """Box indices worth one high-effort re-read: crops the batch dropped,
+    reads whose own label falls outside the fit span, null/invalid serials.
+    Fit-doubt first, bounded so a scan stays fast."""
+    missing = [i for i in range(len(boxes)) if f"b{i}" not in reads]
+    doubtful, nullser = [], []
     for i, box in enumerate(boxes):
         item = reads.get(f"b{i}", {})
-        computed = box_to_u(box, top, bottom, total_u)
+        label = item.get("u_label")
+        if (fit is not None and isinstance(label, (int, float))
+                and not isinstance(label, bool)):
+            lo, hi = assign_units(fit, box[1], box[3])
+            if label < lo or label > hi:
+                doubtful.append(i)
+        serial = item.get("serial")
+        if serial is None or not serial_ok(serial):
+            nullser.append(i)
+    ordered: list[int] = []
+    for i in missing + doubtful + nullser:
+        if i not in ordered:
+            ordered.append(i)
+    return ordered[:max_n]
+
+
+def build_devices(rack_id: str, image_path: str, boxes: list, frame: dict,
+                  reads: dict[str, dict], image_h: int, fit: Fit | None = None) -> list[Device]:
+    """U assignment from one global rail line: every device's top and bottom
+    edges map through the same fit, so one bad read cannot shift its device
+    (or any other). Without a fit the frame rails serve as the line."""
+    total_u = int(frame.get("total_u") or 42)
+    if fit is None:
+        top, bottom = rail_edges_px(frame, image_h)
+        fit = frame_fit(top, bottom, total_u)
+    devices: list[Device] = []
+    for i, box in enumerate(boxes):
+        item = reads.get(f"b{i}", {})
+        u_start, u_end = assign_units(fit, box[1], box[3])
         u_label = _int_or_none(item.get("u_label"))
-        try:
-            u_height = max(1, int(item.get("u_height") or 0)
-                           or max(1, round((box[3] - box[1]) / unit_px)))
-        except (TypeError, ValueError):
-            u_height = 1
-        parsed.append({"box": box, "item": item, "computed": computed,
-                       "u_label": u_label, "u_height": u_height,
-                       "tall": (box[3] - box[1]) / unit_px > 2.5 if unit_px > 0 else False,
-                       "confidence": combine_confidence(item)})
-    fixed: list[tuple[int, int] | None] = [None] * len(boxes)
-    devices: list[Device] = [None] * len(boxes)  # type: ignore[list-item]
-    for i in reversed(range(len(boxes))):
-        p = parsed[i]
-        below = fixed[i + 1] if i + 1 < len(boxes) and parsed[i + 1]["confidence"] > 0 else None
-        u_start, u_end, needs_review = _assign_u(p, below)
-        fixed[i] = (u_start, u_end)
-        confidence = p["confidence"]
-        serial = p["item"].get("serial")
+        needs_review = fit.large_residuals
+        if u_label is not None and (u_label < u_start or u_label > u_end):
+            needs_review = True
+        confidence = combine_confidence(item)
+        serial = item.get("serial")
         if confidence < 0.6 or not serial_ok(serial):
             needs_review = True
-        devices[i] = _make_device(rack_id, image_path, p, u_start, u_end,
-                                  confidence, needs_review)
+        devices.append(_make_device(rack_id, image_path, item, box, u_start, u_end,
+                                    confidence, needs_review))
     return devices
 
 
-def _assign_u(p: dict, below: tuple[int, int] | None) -> tuple[int, int, bool]:
-    """Returns (u_start, u_end, needs_review). u_start is the lowest U.
-
-    Labels beat geometry on disagreement: a rail number read off the image is
-    more reliable than a drifted box edge, and a 2U-tall read means the label
-    sits on the top unit. The stack anchor only confirms an agreeing box."""
-    computed_start, _computed_end = p["computed"]
-    u_label, u_height = p["u_label"], p["u_height"]
-    if below is not None:
-        anchor = below[1] + 1
-        if anchor == computed_start and (u_label is None or u_label == computed_start):
-            return computed_start, computed_start + u_height - 1, False
-        if u_height == 2 and anchor == computed_start - 1:
-            return computed_start - 1, computed_start, True
-    if p["tall"] and u_label is not None and u_height <= 2:
-        if u_height == 2:
-            return u_label, u_label + 1, True
-        return u_label - 1, u_label, True
-    if u_label is not None and u_label == computed_start:
-        return u_label, u_label + u_height - 1, False
-    if u_height == 2 and u_label is not None:
-        if below is not None and below[1] + 1 == u_label:
-            return u_label, u_label + 1, True
-        return u_label - 1, u_label, True
-    if u_label is not None:
-        return u_label, u_label + u_height - 1, True
-    return computed_start, p["computed"][1], True
-
-
-def _make_device(rack_id: str, image_path: str, p: dict, u_start: int, u_end: int,
-                 confidence: float, needs_review: bool) -> Device:
-    item, box = p["item"], p["box"]
+def _make_device(rack_id: str, image_path: str, item: dict, box: list, u_start: int,
+                 u_end: int, confidence: float, needs_review: bool) -> Device:
     serial = item.get("serial")
     return Device(
         id=device_id(rack_id, u_start),
@@ -280,6 +281,32 @@ def _make_device(rack_id: str, image_path: str, p: dict, u_start: int, u_end: in
         source="vision",
         needs_review=needs_review,
     )
+
+
+def _has_identifying_read(item: dict) -> bool:
+    return any(item.get(key) is not None
+               for key in ("hostname", "u_label", "serial"))
+
+
+def drop_dead_gaps(boxes: list, is_gap: list[bool],
+                   reads: dict[str, dict]) -> tuple[list, list[bool], dict[str, dict]]:
+    """Remove gap-seeded boxes whose read came back empty: no sticker was ever
+    there. They must go before overlap resolve, which would otherwise let a
+    doomed box permanently clip a real neighbor. Surviving boxes are
+    reindexed with their reads remapped to match; row boxes always survive."""
+    keep = [i for i, gap in enumerate(is_gap)
+            if not gap or _has_identifying_read(reads.get(f"b{i}", {}))]
+    if len(keep) == len(boxes):
+        return boxes, is_gap, reads
+    remapped = {f"b{n}": reads.get(f"b{i}", {}) for n, i in enumerate(keep)}
+    return [boxes[i] for i in keep], [is_gap[i] for i in keep], remapped
+
+
+def resolve_with_flags(boxes: list, is_gap: list[bool]) -> tuple[list, list[bool]]:
+    """Top-to-bottom sort plus overlap resolve, keeping gap flags aligned."""
+    order = sorted(range(len(boxes)), key=lambda i: (boxes[i][1], boxes[i][0]))
+    return (resolve_overlaps([boxes[i] for i in order]),
+            [is_gap[i] for i in order])
 
 
 def drop_tied_gaps(reads: dict[str, dict], is_gap: list[bool]) -> dict[str, dict]:
@@ -332,11 +359,23 @@ def run_rack_pipeline(image_path: str, client: Any, rack_id: str = "RACK-A",
         client, image_url, w, h, rail_top, rail_bottom, int(frame.get("total_u") or 42))
     calls.extend(seg_calls)
 
-    reads, label_calls = read_labels(client, image, boxes)
-    calls.extend(label_calls)
+    reads, batch_calls = read_initial(client, image, boxes)
+    calls.extend(batch_calls)
     reads = drop_tied_gaps(reads, is_gap)
+    boxes, is_gap, reads = drop_dead_gaps(boxes, is_gap, reads)
+    boxes, is_gap = resolve_with_flags(boxes, is_gap)
+    total_u = int(frame.get("total_u") or 42)
+    rails = (rail_top, rail_bottom)
+    fit = fit_rail(label_pairs(boxes, reads), total_u, frame=rails)
+    jobs = select_rereads(boxes, reads, fit)
+    if jobs:
+        updates, recall_calls = reread_selected(
+            client, image, [(f"b{i}", boxes[i]) for i in jobs])
+        calls.extend(recall_calls)
+        reads.update(updates)
+        fit = fit_rail(label_pairs(boxes, reads), total_u, frame=rails) or fit
 
-    devices = [d for d in build_devices(rack_id, image_path, boxes, frame, reads, h)
+    devices = [d for d in build_devices(rack_id, image_path, boxes, frame, reads, h, fit)
                if d.confidence > 0.0]
     accuracy = diff_accuracy(devices, seed_path) if seed_path else None
 

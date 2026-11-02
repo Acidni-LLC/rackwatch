@@ -1,9 +1,9 @@
 """Muse Spark label reading (DESIGN.md §8.2).
 
 One rack-frame call per image, then batched crop reads (≤6 crops per call,
-each padded 8% plus a full-image thumbnail). Devices below 0.6 confidence
-are re-read once at high effort. U positions come from deterministic math;
-Spark's own U read wins when the two agree within 1, else needs_review.
+each padded 8% plus a full-image thumbnail). The pipeline fits one rail line
+from all reads and re-reads only what the fit or a null serial doubts, at
+most one batch at high effort.
 """
 
 from __future__ import annotations
@@ -21,7 +21,6 @@ from vision.sam import Box, grid_to_pixels
 
 BATCH_SIZE = 6
 CROP_PAD = 0.08
-CONFIDENCE_THRESHOLD = 0.6
 SERIAL_RE = re.compile(r"^[A-Z0-9][A-Z0-9-]{2,19}$")
 
 VALID_TYPES = {"switch", "server", "firewall", "router", "ups", "pdu",
@@ -171,8 +170,10 @@ def _label_call(client: Any, image: Image.Image, batch: list[tuple[str, Box]],
     return parsed.get("devices", []), [resp.call_id, *repair_calls]
 
 
-def read_labels(client: Any, image: Image.Image, boxes: list[Box]) -> tuple[dict[str, dict], list[str]]:
-    """Batched reads at low effort; one high-effort re-read per weak device."""
+def read_initial(client: Any, image: Image.Image,
+                 boxes: list[Box]) -> tuple[dict[str, dict], list[str]]:
+    """Batched reads at low effort, no re-reads; the rail fit decides what is
+    worth a second look."""
     calls: list[str] = []
     crop_ids = [f"b{i}" for i in range(len(boxes))]
     merged: dict[str, dict] = {}
@@ -184,28 +185,25 @@ def read_labels(client: Any, image: Image.Image, boxes: list[Box]) -> tuple[dict
         for item in items:
             if item.get("crop_id") in crop_ids:
                 merged[item["crop_id"]] = item
-    for crop_id, box in zip(crop_ids, boxes, strict=True):
-        if crop_id not in merged:
-            reread = True  # the batch dropped this crop: retry once at high effort
-        else:
-            item = merged[crop_id]
-            reread = _confidence(item) < CONFIDENCE_THRESHOLD and (
-                _has_signal(item))
-        if reread:
-            items, reread_calls = _label_call(client, image, [(crop_id, box)],
-                                              P.REREAD_PROMPT, P.REREAD_SYSTEM, "high")
-            calls.extend(reread_calls)
-            for fresh in items:
-                if fresh.get("crop_id") == crop_id:
-                    merged[crop_id] = fresh
     return merged, calls
 
 
-def _has_signal(item: dict) -> bool:
-    """Anything at all read: a fully null read retries nothing better."""
-    if any(item.get(key) is not None for key in READ_FIELDS + ("u_label",)):
-        return True
-    return any(isinstance(v, (int, float)) for v in (item.get("field_confidence") or {}).values())
+def reread_selected(client: Any, image: Image.Image,
+                    jobs: list[tuple[str, Box]]) -> tuple[dict[str, dict], list[str]]:
+    """High-effort re-reads in shared batches: one slow call covers up to
+    BATCH_SIZE crops instead of one call per crop. Callers cap the list at
+    one batch so a scan stays fast."""
+    calls: list[str] = []
+    merged: dict[str, dict] = {}
+    wanted = {crop_id for crop_id, _ in jobs}
+    for start in range(0, len(jobs), BATCH_SIZE):
+        items, reread_calls = _label_call(client, image, jobs[start:start + BATCH_SIZE],
+                                          P.REREAD_PROMPT, P.REREAD_SYSTEM, "high")
+        calls.extend(reread_calls)
+        for fresh in items:
+            if fresh.get("crop_id") in wanted:
+                merged[fresh["crop_id"]] = fresh
+    return merged, calls
 
 
 READ_FIELDS = ("make", "model", "serial", "hostname")
@@ -228,10 +226,6 @@ def combine_confidence(item: dict) -> float:
         elif key not in fields:
             scores.append(PRESENT_DEFAULT)
     return min(scores) if scores else 0.0
-
-
-def _confidence(item: dict) -> float:
-    return combine_confidence(item)
 
 
 def serial_ok(serial: str | None) -> bool:
