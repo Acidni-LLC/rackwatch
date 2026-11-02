@@ -69,6 +69,29 @@ def silence_wav(seconds: int = 3, rate: int = 24000) -> bytes:
     return out.getvalue()
 
 
+def resolved(p: dict) -> dict:
+    """The [U] items in DESIGN.md §5, answered from the probes above and from the published docs."""
+    sweep = p.get("sam_prompt_sweep", {}).get("sweep", {})
+    spaces = {tuple(s) for v in sweep.values() for s in v.get("coordinate_space", [])}
+    return {
+        "reasoning_effort_levels": p.get("reasoning_effort_levels", {}).get("accepted"),
+        "json_schema_strict": p.get("json_schema_strict", {}).get("ok"),
+        "tool_choice": "only auto is accepted; none, required and named functions return HTTP 400 (live, Nov 2 2026)",
+        "encrypted_reasoning_returned": p.get("tool_call_and_reasoning_replay", {}).get(
+            "encrypted_reasoning_returned"
+        ),
+        "sam_coordinate_space": f"original image pixels, reported as w and h on each box: {sorted(spaces)}",
+        "sam_concept_prompts": {k: v.get("boxes") for k, v in sweep.items()},
+        "sam_prompt_finding": "device-level concepts find nothing or the whole rack on this image; 'white label' finds each sticker; box prompts return one box per seeded object, up to 16 per request",
+        "spark_image_coordinates": "normalized 0-1000 grid, even when pixels are requested (docs/decisions.md D-007)",
+        "image_size_limit": "a 1280x1920 JPEG data URL works for Spark and SAM; no smaller limit was hit, and the pipeline caps the longest side at 2048",
+        "pricing_usd": "published: $1.25 in, $0.15 cached, $4.25 out per 1M tokens; SAM $2.50 per 1,000 images; voice $0.18 per hour; docs/decisions.md D-006",
+        "muse_code": "headless `muse exec`; META_API_KEY in the environment; default model muse-spark-1.2, so runs pass --model muse-spark-1.3",
+        "glimmer_lora": "not attempted: the stretch router needs a Fireworks key, which this project does not have",
+        "video_as_spark_input": "not tested: video mode runs the photo pipeline on the sharpest frame",
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--rack", default=str(ROOT / "data/rack/sample_rack.jpg"))
@@ -332,6 +355,7 @@ def main() -> None:
     probe(p, "asr_silence", asr_silence)
     probe(p, "asr_speech", asr_speech)
 
+    r["resolved"] = resolved(p)
     row = client.conn.execute(
         "SELECT COUNT(*) AS n, COALESCE(SUM(est_cost_usd),0) AS c FROM calls WHERE run_id = 'preflight'"
     ).fetchone()

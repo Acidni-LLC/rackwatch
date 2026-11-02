@@ -1,6 +1,6 @@
 """Save README screenshots with a headless browser. The app must be running on port 8000, with a finished run.
 
-    python scripts/capture_screens.py --run RUN_ID --incident INC-SW
+python scripts/capture_screens.py --run RUN_ID --incident INC-SW
 """
 
 from __future__ import annotations

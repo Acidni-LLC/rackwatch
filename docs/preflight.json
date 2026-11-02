@@ -1,5 +1,5 @@
 {
-  "checked_at": "2026-11-02T13:44:15-0500",
+  "checked_at": "2026-11-02T15:37:47-0500",
   "base_url": "https://api.meta.ai/v1",
   "probes": {
     "models": {
@@ -17,7 +17,7 @@
       ],
       "all_wanted_present": true,
       "note": "9 models",
-      "seconds": 1.29
+      "seconds": 2.26
     },
     "responses_plain": {
       "ok": true,
@@ -25,14 +25,14 @@
       "usage": {
         "input_tokens": 14,
         "cached_tokens": 0,
-        "output_tokens": 148
+        "output_tokens": 93
       },
       "output_types": [
         "reasoning",
         "message"
       ],
       "note": "ready",
-      "seconds": 2.03
+      "seconds": 0.86
     },
     "json_object": {
       "ok": true,
@@ -40,29 +40,29 @@
         "ok": true
       },
       "note": "{\"ok\": true}",
-      "seconds": 1.39
+      "seconds": 0.97
     },
     "json_schema_strict": {
       "ok": true,
       "parsed": {
         "device_type": "router"
       },
-      "note": "{\"device_type\":\"router\"}",
-      "seconds": 1.73
+      "note": "{\"device_type\": \"router\"}",
+      "seconds": 1.68
     },
     "tool_call_and_reasoning_replay": {
       "ok": true,
       "args": "{\"query\":\"SW-ACC-02\"}",
       "encrypted_reasoning_returned": true,
       "replay_of_output_items_accepted": true,
-      "second_text": "SW-ACC-02 is at **U position 12** (u_start: 12).\n",
+      "second_text": "**SW-ACC-02** is at **U position 12** (u_start: 12).\n",
       "second_usage": {
-        "input_tokens": 728,
+        "input_tokens": 731,
         "cached_tokens": 113,
-        "output_tokens": 98
+        "output_tokens": 83
       },
-      "note": "encrypted=True answer='SW-ACC-02 is at **U position 12** (u_sta'",
-      "seconds": 2.73
+      "note": "encrypted=True answer='**SW-ACC-02** is at **U position 12** (u'",
+      "seconds": 1.42
     },
     "reasoning_effort_levels": {
       "ok": true,
@@ -76,13 +76,13 @@
       ],
       "rejected": {},
       "note": "accepted ['minimal', 'low', 'medium', 'high', 'xhigh', 'max']",
-      "seconds": 10.78
+      "seconds": 12.62
     },
     "sam_prompt_sweep": {
       "ok": true,
       "image_size": [
-        1100,
-        2048
+        1280,
+        1920
       ],
       "sweep": {
         "rack-mounted device": {
@@ -122,9 +122,21 @@
           "head": ""
         },
         "server": {
-          "boxes": 0,
-          "coordinate_space": [],
-          "first": [],
+          "boxes": 1,
+          "coordinate_space": [
+            [
+              1280,
+              1920
+            ]
+          ],
+          "first": [
+            [
+              235,
+              46,
+              1024,
+              1912
+            ]
+          ],
           "usage": {
             "input_tokens": 0,
             "input_tokens_details": {
@@ -137,7 +149,7 @@
             "total_tokens": 0,
             "images_processed": 1
           },
-          "head": ""
+          "head": "<0f>0<|box;x1=235;y1=46;x2=102"
         },
         "patch panel": {
           "boxes": 0,
@@ -158,103 +170,31 @@
           "head": ""
         },
         "device label sticker": {
-          "boxes": 0,
-          "coordinate_space": [],
-          "first": [],
-          "usage": {
-            "input_tokens": 0,
-            "input_tokens_details": {
-              "cached_tokens": 0
-            },
-            "output_tokens": 0,
-            "output_tokens_details": {
-              "reasoning_tokens": 0
-            },
-            "total_tokens": 0,
-            "images_processed": 1
-          },
-          "head": ""
-        },
-        "rack server": {
-          "boxes": 0,
-          "coordinate_space": [],
-          "first": [],
-          "usage": {
-            "input_tokens": 0,
-            "input_tokens_details": {
-              "cached_tokens": 0
-            },
-            "output_tokens": 0,
-            "output_tokens_details": {
-              "reasoning_tokens": 0
-            },
-            "total_tokens": 0,
-            "images_processed": 1
-          },
-          "head": ""
-        },
-        "rack unit": {
-          "boxes": 0,
-          "coordinate_space": [],
-          "first": [],
-          "usage": {
-            "input_tokens": 0,
-            "input_tokens_details": {
-              "cached_tokens": 0
-            },
-            "output_tokens": 0,
-            "output_tokens_details": {
-              "reasoning_tokens": 0
-            },
-            "total_tokens": 0,
-            "images_processed": 1
-          },
-          "head": ""
-        },
-        "network device": {
-          "boxes": 0,
-          "coordinate_space": [],
-          "first": [],
-          "usage": {
-            "input_tokens": 0,
-            "input_tokens_details": {
-              "cached_tokens": 0
-            },
-            "output_tokens": 0,
-            "output_tokens_details": {
-              "reasoning_tokens": 0
-            },
-            "total_tokens": 0,
-            "images_processed": 1
-          },
-          "head": ""
-        },
-        "white label": {
           "boxes": 15,
           "coordinate_space": [
             [
-              1100,
-              2048
+              1280,
+              1920
             ]
           ],
           "first": [
             [
-              510,
-              1436,
-              727,
-              1464
+              587,
+              1334,
+              795,
+              1366
             ],
             [
-              516,
-              257,
-              732,
-              285
+              831,
+              219,
+              880,
+              243
             ],
             [
-              654,
-              1672,
-              824,
-              1694
+              588,
+              259,
+              805,
+              291
             ]
           ],
           "usage": {
@@ -269,38 +209,170 @@
             "total_tokens": 0,
             "images_processed": 1
           },
-          "head": "<0f>0<|box;x1=510;y1=1436;x2=7"
+          "head": "<0f>0<|box;x1=587;y1=1334;x2=7"
+        },
+        "rack server": {
+          "boxes": 1,
+          "coordinate_space": [
+            [
+              1280,
+              1920
+            ]
+          ],
+          "first": [
+            [
+              235,
+              46,
+              1024,
+              1912
+            ]
+          ],
+          "usage": {
+            "input_tokens": 0,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 0,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 0,
+            "images_processed": 1
+          },
+          "head": "<0f>0<|box;x1=235;y1=46;x2=102"
+        },
+        "rack unit": {
+          "boxes": 1,
+          "coordinate_space": [
+            [
+              1280,
+              1920
+            ]
+          ],
+          "first": [
+            [
+              235,
+              46,
+              1024,
+              1909
+            ]
+          ],
+          "usage": {
+            "input_tokens": 0,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 0,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 0,
+            "images_processed": 1
+          },
+          "head": "<0f>0<|box;x1=235;y1=46;x2=102"
+        },
+        "network device": {
+          "boxes": 1,
+          "coordinate_space": [
+            [
+              1280,
+              1920
+            ]
+          ],
+          "first": [
+            [
+              235,
+              46,
+              1024,
+              1914
+            ]
+          ],
+          "usage": {
+            "input_tokens": 0,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 0,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 0,
+            "images_processed": 1
+          },
+          "head": "<0f>0<|box;x1=235;y1=46;x2=102"
+        },
+        "white label": {
+          "boxes": 17,
+          "coordinate_space": [
+            [
+              1280,
+              1920
+            ]
+          ],
+          "first": [
+            [
+              587,
+              1334,
+              795,
+              1365
+            ],
+            [
+              831,
+              218,
+              880,
+              243
+            ],
+            [
+              588,
+              259,
+              804,
+              290
+            ]
+          ],
+          "usage": {
+            "input_tokens": 0,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 0,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 0,
+            "images_processed": 1
+          },
+          "head": "<0f>0<|box;x1=587;y1=1334;x2=7"
         }
       },
-      "note": "rack-mounted device=0, network switch=0, server=0, patch panel=0, device label sticker=0, rack server=0, rack unit=0, network device=0, white label=15",
-      "seconds": 12.85
+      "note": "rack-mounted device=0, network switch=0, server=1, patch panel=0, device label sticker=15, rack server=1, rack unit=1, network device=1, white label=17",
+      "seconds": 28.76
     },
     "sam_non_stream": {
       "ok": true,
-      "boxes": 0,
-      "note": "non-stream boxes=0",
-      "seconds": 2.43
+      "boxes": 1,
+      "note": "non-stream boxes=1",
+      "seconds": 5.63
     },
     "spark_vision_rack_frame": {
       "ok": true,
       "parsed": {
-        "rack_top_y": 12,
-        "rack_bottom_y": 976,
+        "rack_top_y": 23,
+        "rack_bottom_y": 980,
         "total_u": 42,
         "rail_numbers_visible": true,
         "rack_label": "RACK-A ACME DENTAL"
       },
       "usage": {
-        "input_tokens": 2905,
+        "input_tokens": 3232,
         "cached_tokens": 0,
-        "output_tokens": 401
+        "output_tokens": 382
       },
       "image_size": [
-        1100,
-        2048
+        1280,
+        1920
       ],
-      "note": "{\"rack_top_y\":12,\"rack_bottom_y\":976,\"total_u\":42,\"rail_numbers_visible\":true,\"rack_label\":\"RACK-A A",
-      "seconds": 2.86
+      "note": "{\"rack_top_y\":23,\"rack_bottom_y\":980,\"total_u\":42,\"rail_numbers_visible\":true,\"rack_label\":\"RACK-A A",
+      "seconds": 3.96
     },
     "asr_silence": {
       "ok": true,
@@ -312,20 +384,52 @@
       ],
       "audioDurationMs": 3040,
       "note": "silence transcript=''",
-      "seconds": 1.71
+      "seconds": 1.64
     },
     "asr_speech": {
       "ok": true,
       "result": {
-        "sessionId": "voyager/transcribe/A0AF157ABB004FFD8541BA1DD731CD56",
-        "transcript": "I'm on site at the Acme Dental Closet. The SFP on SWACC02 in rack A, U12, has been reset and the switch is power cycled.",
+        "sessionId": "voyager/transcribe/405C466358BB46DC9402D7977F149872",
+        "transcript": "I'm on site at the Acme Dental Closet. The SFP on SWACC02 in rack A U12 has been reset and the switch is power power cycled.",
         "audioDurationMs": 12240,
         "turns": []
       },
-      "note": "I'm on site at the Acme Dental Closet. The SFP on SWACC02 in rack A, U12, has be",
-      "seconds": 2.59
+      "note": "I'm on site at the Acme Dental Closet. The SFP on SWACC02 in rack A U12 has been",
+      "seconds": 4.25
     }
   },
-  "cost_usd_this_db": 0.0414,
-  "calls_this_db": 24
+  "resolved": {
+    "reasoning_effort_levels": [
+      "minimal",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+    ],
+    "json_schema_strict": true,
+    "tool_choice": "only auto is accepted; none, required and named functions return HTTP 400 (live, Nov 2 2026)",
+    "encrypted_reasoning_returned": true,
+    "sam_coordinate_space": "original image pixels, reported as w and h on each box: [(1280, 1920)]",
+    "sam_concept_prompts": {
+      "rack-mounted device": 0,
+      "network switch": 0,
+      "server": 1,
+      "patch panel": 0,
+      "device label sticker": 15,
+      "rack server": 1,
+      "rack unit": 1,
+      "network device": 1,
+      "white label": 17
+    },
+    "sam_prompt_finding": "device-level concepts find nothing or the whole rack on this image; 'white label' finds each sticker; box prompts return one box per seeded object, up to 16 per request",
+    "spark_image_coordinates": "normalized 0-1000 grid, even when pixels are requested (docs/decisions.md D-007)",
+    "image_size_limit": "a 1280x1920 JPEG data URL works for Spark and SAM; no smaller limit was hit, and the pipeline caps the longest side at 2048",
+    "pricing_usd": "published: $1.25 in, $0.15 cached, $4.25 out per 1M tokens; SAM $2.50 per 1,000 images; voice $0.18 per hour; docs/decisions.md D-006",
+    "muse_code": "headless `muse exec`; META_API_KEY in the environment; default model muse-spark-1.2, so runs pass --model muse-spark-1.3",
+    "glimmer_lora": "not attempted: the stretch router needs a Fireworks key, which this project does not have",
+    "video_as_spark_input": "not tested: video mode runs the photo pipeline on the sharpest frame"
+  },
+  "cost_usd_this_db": 0.0842,
+  "calls_this_db": 48
 }

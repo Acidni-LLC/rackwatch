@@ -70,7 +70,7 @@ export default function Rack({ status }: { status: Status | null }) {
     form.append("speed", "4");
     try {
       const { run_id } = await postForm<{ run_id: string }>("/api/rack/scan", form);
-      if (file) setLocalImage(URL.createObjectURL(file));
+      if (file && file.type.startsWith("image/")) setLocalImage(URL.createObjectURL(file));
       setRunId(run_id);
     } catch (e) {
       setError((e as Error).message);
@@ -94,7 +94,7 @@ export default function Rack({ status }: { status: Status | null }) {
             <input
               ref={fileInput}
               type="file"
-              accept="image/*"
+              accept="image/*,video/*"
               className="hidden"
               onChange={(e) => {
                 const file = e.target.files?.[0];
@@ -104,7 +104,7 @@ export default function Rack({ status }: { status: Status | null }) {
             {!replayOnly ? (
               <>
                 <Btn disabled={scanning} onClick={() => fileInput.current?.click()}>
-                  Upload photo
+                  Upload photo or video
                 </Btn>
                 <Btn tone="amber" disabled={scanning} onClick={() => scan()}>
                   Scan live

@@ -33,6 +33,7 @@ TRIAGE_CASSETTE = "triage_pass_after_replan"
 VOICE_CASSETTE = "voice_note"
 VISION_CASSETTE = "vision_sample_rack"
 SAMPLE_VOICE = DATA_DIR / "voice" / "sample_note.wav"
+VIDEO_SUFFIXES = (".mp4", ".mov", ".webm", ".m4v", ".avi")
 
 app = FastAPI(title="RackWatch", version="0.1.0")
 _local = threading.local()
@@ -160,6 +161,15 @@ def _vision_worker(run_id: str, image_path: str, replay: bool, speed: float) -> 
         c.close()
 
 
+def _sharpest_frame(video: Path) -> str:
+    from vision.video import sharpest_frame_path  # noqa: PLC0415 - Muse Code's package, imported at use
+
+    try:
+        return sharpest_frame_path(str(video), str(video.with_suffix(".jpg")))
+    except Exception as error:
+        raise HTTPException(422, f"Could not read frames from that video: {error}") from error
+
+
 @app.post("/api/rack/scan")
 async def rack_scan(
     file: UploadFile | None = File(default=None),
@@ -178,6 +188,8 @@ async def rack_scan(
         target = UPLOADS_DIR / f"{uuid.uuid4().hex}{Path(file.filename).suffix.lower()}"
         target.write_bytes(await file.read())
         image_path = str(target)
+        if target.suffix in VIDEO_SUFFIXES:
+            image_path = await asyncio.to_thread(_sharpest_frame, target)
     if use_replay:
         _ensure_cassette(s, VISION_CASSETTE)
     run_id = new_run_id()

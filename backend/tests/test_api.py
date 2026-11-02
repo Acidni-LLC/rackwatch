@@ -225,3 +225,25 @@ def test_metrics_come_from_the_run(api):
     metrics = api.get(f"/api/metrics?run_id={run_id}").json()
     assert metrics["ready"] and metrics["incidents"] == 2 and metrics["attempts"] == 2
     assert metrics["grouping"]["f1"] == 1.0
+
+
+def test_video_upload_scans_the_sharpest_frame(tmp_path):
+    cv2 = pytest.importorskip("cv2")
+    numpy = pytest.importorskip("numpy")
+    path = tmp_path / "rack.avi"
+    writer = cv2.VideoWriter(str(path), cv2.VideoWriter_fourcc(*"MJPG"), 5, (160, 120))
+    for i in range(10):
+        frame = numpy.zeros((120, 160, 3), dtype=numpy.uint8)
+        frame[:: 8 if i == 5 else 60, :: 8 if i == 5 else 60] = 255
+        writer.write(frame)
+    writer.release()
+    out = main._sharpest_frame(path)
+    assert out.endswith(".jpg") and Path(out).exists()
+
+
+def test_unreadable_video_is_a_clear_422(tmp_path):
+    bad = tmp_path / "bad.mp4"
+    bad.write_bytes(b"not a video")
+    with pytest.raises(main.HTTPException) as caught:
+        main._sharpest_frame(bad)
+    assert caught.value.status_code == 422

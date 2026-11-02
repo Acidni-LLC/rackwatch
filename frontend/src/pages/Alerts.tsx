@@ -12,6 +12,7 @@ export default function Alerts({ status }: { status: Status | null }) {
   const [hover, setHover] = useState<AlertRow | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
+  const [speed, setSpeed] = useState(4);
 
   useEffect(() => {
     get<AlertsResponse>(`/api/alerts?view=${raw ? "raw" : "scrubbed"}`).then(setData).catch((e) => setError(String(e.message)));
@@ -30,7 +31,7 @@ export default function Alerts({ status }: { status: Status | null }) {
     setStarting(true);
     setError(null);
     try {
-      const { run_id } = await post<{ run_id: string }>("/api/triage", { replay, demo_strict: strict, speed: replay ? 4 : 1 });
+      const { run_id } = await post<{ run_id: string }>("/api/triage", { replay, demo_strict: strict, speed: replay ? speed : 1 });
       go(`/run/${run_id}`);
     } catch (e) {
       setError((e as Error).message);
@@ -64,6 +65,9 @@ export default function Alerts({ status }: { status: Status | null }) {
           <Btn tone={liveAvailable ? "plain" : "amber"} disabled={starting || !hasRecording} onClick={() => start(true)} title={hasRecording ? "Replays a recorded run at 4× speed. Tools and the verifier run for real." : "No recording found"}>
             Replay recorded run
           </Btn>
+          <button type="button" onClick={() => setSpeed(speed === 4 ? 1 : 4)} className="font-mono text-[12.5px] text-dim hover:text-ink" title="Replay speed">
+            ×{speed}
+          </button>
         </div>
       </div>
       <ErrorLine message={error} />
