@@ -9,6 +9,7 @@ optional ``;c=`` confidence group (docs/preflight.json).
 from __future__ import annotations
 
 import re
+import statistics
 from typing import Any
 
 BOX_RE = re.compile(
@@ -258,6 +259,54 @@ def resolve_overlaps(boxes: list[Box], max_frac: float = 0.15) -> list[Box]:
             ordered[i] = (upper[0], upper[1], upper[2], mid)
             ordered[i + 1] = (lower[0], mid, lower[2], lower[3])
     return ordered
+
+
+def fallback_row_boxes(rows: list[list[Box]], boxes: list[Box],
+                       image_w: int, image_h: int,
+                       rail_left_px: float | None = None,
+                       rail_right_px: float | None = None,
+                       rail_top_px: float = 0,
+                       rail_bottom_px: float | None = None,
+                       total_u: int = 42) -> list[Box]:
+    """Last-resort box per sticker row that no SAM box covers, so a scan never
+    silently loses a stickered device the segmenter missed. Size comes from
+    the scan's own surviving boxes (median width/height), falling back to the
+    rail geometry; position from the row's sticker centroid. Nothing here
+    knows this rack's layout."""
+    orphans = [
+        row for row in rows
+        if not any(contains(b, sum((s[0] + s[2]) / 2 for s in row) / len(row),
+                            sum((s[1] + s[3]) / 2 for s in row) / len(row))
+                   for b in boxes)
+    ]
+    if not orphans:
+        return []
+    widths = sorted(b[2] - b[0] for b in boxes)
+    heights = sorted(b[3] - b[1] for b in boxes)
+    bottom = image_h if rail_bottom_px is None else rail_bottom_px
+    unit = (bottom - rail_top_px) / total_u if total_u else image_h / 42
+    med_w = float(statistics.median(widths)) if widths else None
+    if med_w is None or med_w <= 0:
+        med_w = ((rail_right_px - rail_left_px)
+                 if rail_left_px is not None and rail_right_px is not None
+                 and rail_right_px > rail_left_px else image_w * 0.6)
+    med_h = float(statistics.median(heights)) if heights else unit
+    if med_h <= 0:
+        med_h = unit if unit > 0 else image_h / 42
+    lo_x = rail_left_px if rail_left_px is not None else 0.0
+    hi_x = rail_right_px if rail_right_px is not None else float(image_w)
+    if hi_x <= lo_x:
+        lo_x, hi_x = 0.0, float(image_w)
+    out: list[Box] = []
+    for row in orphans:
+        cx = sum((s[0] + s[2]) / 2 for s in row) / len(row)
+        cy = sum((s[1] + s[3]) / 2 for s in row) / len(row)
+        x1 = max(lo_x, min(hi_x - 1, cx - med_w / 2))
+        x2 = max(x1 + 1, min(hi_x, cx + med_w / 2))
+        y1 = max(float(rail_top_px), min(bottom - 1, cy - med_h / 2))
+        y2 = max(y1 + 1, min(bottom, cy + med_h / 2))
+        out.append((int(round(x1)), int(round(y1)), int(round(x2)), int(round(y2))))
+    return out
 
 
 def grid_to_pixels(bbox: dict[str, float], image_w: int, image_h: int) -> Box:

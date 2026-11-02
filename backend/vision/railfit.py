@@ -19,7 +19,7 @@ import numpy as np
 MIN_PAIRS = 4
 INLIER_TOL_U = 0.4  # residual tolerance for inliers, in U
 BAD_FIT_MAD_U = 0.5  # scaled MAD above this flags every device
-EDGE_INSET_FRAC = 0.15  # box edges inset this fraction of a unit before mapping
+COVER_FRAC = 0.5  # a unit counts only when the box covers more than half of it
 
 
 class Fit(NamedTuple):
@@ -111,13 +111,54 @@ def unit_at(fit: Fit, y: float) -> int:
     return max(1, min(fit.total_u, math.ceil((y - fit.a) / fit.b)))
 
 
+def boundary_y(fit: Fit, k: int) -> float:
+    """Pixel y of boundary B(k): the line between unit k and unit k+1."""
+    return fit.a + fit.b * k
+
+
+def unit_span(fit: Fit, unit: int) -> tuple[float, float]:
+    """Pixel (top, bottom) of one unit: B(unit) sits above B(unit-1)."""
+    return boundary_y(fit, unit), boundary_y(fit, unit - 1)
+
+
 def assign_units(fit: Fit, y_top: float, y_bottom: float) -> tuple[int, int]:
-    """u_start/u_end from one global line: each box edge rounded inward by a
-    fraction of a unit, so edges resting exactly on a boundary resolve inside."""
-    s = EDGE_INSET_FRAC * abs(fit.b)
-    lo = unit_at(fit, y_bottom - s)
-    hi = unit_at(fit, y_top + s)
-    return (lo, hi) if lo <= hi else (lo, lo)
+    """u_start/u_end from one global line: a unit counts only when the box
+    covers more than half of it, so a loose edge that crosses a rail line by
+    a sliver cannot add a whole U. A box covering nothing by half falls back
+    to the unit holding its center."""
+    if y_bottom < y_top:
+        y_top, y_bottom = y_bottom, y_top
+    unit_h = abs(fit.b)
+    if unit_h <= 0:
+        u = unit_at(fit, (y_top + y_bottom) / 2)
+        return (u, u)
+    covered = [u for u in range(1, fit.total_u + 1)
+               if _overlap(y_top, y_bottom, *unit_span(fit, u)) > COVER_FRAC * unit_h]
+    if covered:
+        return (min(covered), max(covered))
+    u = unit_at(fit, (y_top + y_bottom) / 2)
+    return (u, u)
+
+
+def _overlap(lo_a: float, hi_a: float, lo_b: float, hi_b: float) -> float:
+    top = max(lo_a, lo_b)
+    bottom = min(hi_a, hi_b)
+    return max(0.0, bottom - top)
+
+
+def snap_box(fit: Fit, u_start: int, u_end: int, left_px: float, right_px: float,
+             image_w: int, image_h: int) -> tuple[int, int, int, int]:
+    """Grid-snapped box for a decided span: y from the top of u_end to the
+    bottom of u_start on the fitted line, x across the rack interior between
+    the rails, everything clamped inside the image. SAM still finds the
+    device; the box is only snapped to the grid afterwards."""
+    y_top = boundary_y(fit, u_end)
+    y_bottom = boundary_y(fit, u_start - 1)
+    x1 = max(0, min(image_w - 1, int(round(min(left_px, right_px)))))
+    x2 = max(x1 + 1, min(image_w, int(round(max(left_px, right_px)))))
+    y1 = max(0, min(image_h - 1, int(round(min(y_top, y_bottom)))))
+    y2 = max(y1 + 1, min(image_h, int(round(max(y_top, y_bottom)))))
+    return (x1, y1, x2, y2)
 
 
 def label_pairs(boxes: list[Any], reads: dict[str, dict]) -> list[tuple[float, float]]:
