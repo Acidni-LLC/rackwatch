@@ -1,0 +1,88 @@
+{
+  "checked_at": "2026-11-02T17:28:12-0500",
+  "provider": "baseten",
+  "model": "meta-models/muse-spark-open",
+  "probes": {
+    "plain": {
+      "ok": true,
+      "text": "ready",
+      "usage": {
+        "input_tokens": 151,
+        "cached_tokens": 128,
+        "output_tokens": 29
+      },
+      "output_types": [
+        "reasoning",
+        "message"
+      ],
+      "note": "ready",
+      "seconds": 1.52
+    },
+    "json_object": {
+      "ok": true,
+      "parsed": {
+        "ok": true
+      },
+      "note": "{\"ok\": true}",
+      "seconds": 0.59
+    },
+    "tools_and_reasoning_replay": {
+      "ok": true,
+      "args": "{\"query\": \"SW-ACC-02\"}",
+      "reasoning_items_replayed_ok": true,
+      "reasoning_summary_returned": false,
+      "reasoning_item_keys": [
+        "content",
+        "id",
+        "status",
+        "summary",
+        "type"
+      ],
+      "answer": "Device **SW-ACC-02** found in CMDB:\n\n- **U position (u_start): 12**\n\nIt is located starting at rack unit **U12**.",
+      "second_usage": {
+        "input_tokens": 817,
+        "cached_tokens": 128,
+        "output_tokens": 122
+      },
+      "note": "cached=128 answer='Device **SW-ACC-02** found in CMDB:\\n\\n- *'",
+      "seconds": 1.46
+    },
+    "our_tool_definitions": {
+      "ok": true,
+      "called": [
+        "list_alerts"
+      ],
+      "note": "['list_alerts']",
+      "seconds": 0.65
+    },
+    "reasoning_effort_levels": {
+      "ok": true,
+      "accepted": [
+        "minimal",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "rejected": {},
+      "note": "accepted ['minimal', 'low', 'medium', 'high', 'xhigh', 'max']",
+      "seconds": 4.21
+    },
+    "image_input": {
+      "ok": true,
+      "text": "The name plate at the very top center of the rack says:\n\n**RACK-A ACME DENTAL**",
+      "note": "The name plate at the very top center of the rack says:\n\n**R",
+      "seconds": 4.34
+    },
+    "cross_provider_mixed": {
+      "ok": true,
+      "meta_after_partner": "SW-ACC-02 is at **U position 12** (`u_start: 12`).",
+      "partner_after_meta": "I don't know which rack SW-ACC-02 is in \u2014 the CMDB lookup result only returned i",
+      "note": "both directions accepted",
+      "seconds": 4.89
+    }
+  },
+  "calls": 15,
+  "cost_usd": 0.0169
+}

@@ -4,7 +4,7 @@ High effort for planning, re-planning and drafting claims. Low for bulk tool tur
 
 The engine says which model serves a turn:
   hosted  Muse Spark 1.3 on the Meta API, every turn.
-  open    Muse Spark Open, Meta's open-weight model, on Fireworks, every turn.
+  open    Muse Spark Open, Meta's open-weight model, through an inference partner, every turn.
   mixed   Muse Spark Open for low-effort tool turns, and Muse Spark 1.3 for planning and drafting.
 """
 

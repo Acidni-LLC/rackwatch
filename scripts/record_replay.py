@@ -118,8 +118,8 @@ def record_triage(settings, tries: int) -> None:
 
 def record_open(settings) -> None:
     """A normal run on Muse Spark Open. It is whatever happened on this take, pass or fail, and meta.json says which."""
-    if not settings.fireworks_api_key:
-        raise SystemExit("recording on Muse Spark Open needs FIREWORKS_API_KEY")
+    if not settings.open_api_key:
+        raise SystemExit("recording on Muse Spark Open needs a partner key in .env")
     run_settings, conn = fresh(settings, "open")
     summary = run_once(conn, run_settings, OPEN_CASSETTE, None, False, 0.0, "open")
     describe(conn, summary["run_id"])

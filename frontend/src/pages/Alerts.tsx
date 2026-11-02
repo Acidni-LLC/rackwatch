@@ -63,7 +63,7 @@ export default function Alerts({ status }: { status: Status | null }) {
                 Live, rushed first try
               </Btn>
               {status?.open_weight_key ? (
-                <Btn disabled={starting} onClick={() => start(false, false, "open")} title="Every turn on Muse Spark Open, Meta's open-weight model, through Fireworks">
+                <Btn disabled={starting} onClick={() => start(false, false, "open")} title={`Every turn on Muse Spark Open, Meta's open-weight model, through ${status.open_provider}`}>
                   Live on open weights
                 </Btn>
               ) : null}

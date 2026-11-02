@@ -1,8 +1,8 @@
-"""Live smoke test for Muse Spark Open on Fireworks. Writes docs/preflight_open.json. Costs under $0.05.
+"""Live smoke test for Muse Spark Open through its inference partner. Writes docs/preflight_open.json. Costs under $0.05.
 
 Everything goes through MetaClient. What this answers, before spending on a full run: does the model take our tool
 definitions, does it accept its own reasoning items replayed, do effort levels work, is the prefix cached, and can a
-mixed run cross between Fireworks and the Meta API in both directions.
+mixed run cross between the partner and the Meta API in both directions.
 
     python scripts/preflight_open.py
 """
@@ -53,12 +53,17 @@ def probe(results: dict, name: str, fn) -> None:
 
 def main() -> None:
     settings = get_settings(mode="live")
-    if not settings.fireworks_api_key:
-        raise SystemExit("FIREWORKS_API_KEY is not set")
+    if not settings.open_api_key:
+        raise SystemExit(f"no API key set for {settings.open_provider}")
     client = MetaClient(settings=settings, run_id="preflight_open")
     model = settings.spark_open_model
     hosted = settings.spark_model
-    out: dict = {"checked_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "model": model, "probes": {}}
+    out: dict = {
+        "checked_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+        "provider": settings.open_provider,
+        "model": model,
+        "probes": {},
+    }
     p = out["probes"]
 
     def plain():
@@ -103,7 +108,8 @@ def main() -> None:
         calls = first.function_calls
         if not calls:
             raise RuntimeError(f"no function_call: {[i.get('type') for i in first.output]}")
-        summary = [i.get("summary") for i in first.output if i.get("type") == "reasoning"]
+        reasoning = [i for i in first.output if i.get("type") == "reasoning"]
+        summary = [i.get("summary") for i in reasoning]
         messages += first.output
         messages.append({"type": "function_call_output", "call_id": calls[0]["call_id"], "output": ANSWER})
         second = client.responses(
@@ -119,6 +125,7 @@ def main() -> None:
             "args": calls[0].get("arguments"),
             "reasoning_items_replayed_ok": True,
             "reasoning_summary_returned": bool(summary and summary[0]),
+            "reasoning_item_keys": sorted(reasoning[0]) if reasoning else [],
             "answer": second.output_text[:120],
             "second_usage": vars(second.usage),
             "note": f"cached={second.usage.cached_tokens} answer={second.output_text[:40]!r}",
@@ -180,7 +187,7 @@ def main() -> None:
         return {"text": r.output_text[:100], "note": r.output_text[:60]}
 
     def cross_provider():
-        """Fireworks turn, then a Meta turn on the same history, then Fireworks again: what a mixed run does."""
+        """A partner turn, then a Meta turn on the same history, then the partner again: what a mixed run does."""
         messages: list = [{"role": "user", "content": ASK}]
         first = client.responses(
             purpose="preflight_mixed_1",
@@ -220,8 +227,8 @@ def main() -> None:
             store=False,
         )
         return {
-            "meta_after_fireworks": second.output_text[:80],
-            "fireworks_after_meta": third.output_text[:80],
+            "meta_after_partner": second.output_text[:80],
+            "partner_after_meta": third.output_text[:80],
             "note": "both directions accepted",
         }
 
@@ -239,7 +246,7 @@ def main() -> None:
     out["calls"], out["cost_usd"] = spent["n"], round(spent["c"], 4)
     path = ROOT / "docs/preflight_open.json"
     text = json.dumps(out, indent=2, default=str)
-    for key in (settings.api_key, settings.fireworks_api_key):
+    for key in (settings.api_key, settings.open_api_key):
         text = text.replace(key, "<KEY>")
     path.write_text(text, encoding="utf-8")
     print(f"\nwrote {path}; {spent['n']} calls, ${spent['c']:.4f} est")

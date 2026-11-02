@@ -12,6 +12,7 @@ export interface Status {
   pii_tokens: number;
   cassettes: string[];
   models: { spark: string; sam: string; asr: string; spark_open: string };
+  open_provider: string;
   open_weight_key: boolean;
 }
 

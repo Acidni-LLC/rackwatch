@@ -120,7 +120,8 @@ def status() -> dict:
             "asr": s.asr_model,
             "spark_open": s.spark_open_model,
         },
-        "open_weight_key": bool(s.fireworks_api_key),
+        "open_provider": s.open_provider,
+        "open_weight_key": bool(s.open_api_key),
     }
 
 
@@ -332,8 +333,8 @@ def triage(request: TriageRequest) -> dict:
     cassette = OPEN_CASSETTE if request.engine == "open" else TRIAGE_CASSETTE
     if use_replay:
         _ensure_cassette(s, cassette)
-    elif request.engine != "hosted" and not s.fireworks_api_key:
-        raise HTTPException(409, "Running on Muse Spark Open needs FIREWORKS_API_KEY in .env.")
+    elif request.engine != "hosted" and not s.open_api_key:
+        raise HTTPException(409, f"Running on Muse Spark Open needs a {s.open_provider} API key in .env.")
     ensure_dataset()
     run_id = new_run_id()
     start_run(conn(), run_id, "triage", "replay" if use_replay else s.mode, cassette if use_replay else None)

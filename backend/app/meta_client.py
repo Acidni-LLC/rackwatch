@@ -1,4 +1,4 @@
-"""The ONLY place that talks to a model API: api.meta.ai, and Fireworks for Meta's open-weight Muse Spark Open.
+"""The ONLY place that talks to a model API: api.meta.ai, and an inference partner for Meta's open-weight Muse Spark Open.
 
 Every model call passes through MetaClient, which:
 
@@ -24,7 +24,7 @@ from typing import Any, Protocol
 
 from . import db as dbmod
 from .budget import BudgetExceeded, BudgetGuard, call_cost, voice_cost
-from .config import Settings, get_settings
+from .config import OPEN_PROVIDERS, Settings, get_settings
 from .events import emit, now_iso
 from .pii import UnscrubbedPayloadError, assert_scrubbed
 from .replay import CassettePlayer, CassetteWriter, request_hash, request_summary, strip_encrypted
@@ -33,7 +33,6 @@ __all__ = ["BudgetExceeded", "MetaClient", "MetaResponse", "Usage", "UnscrubbedP
 
 ASR_ENDPOINT = "/v1/asr/transcribe"
 RESPONSES_ENDPOINT = "/v1/responses"
-OPEN_ENDPOINT = "fireworks:/v1/responses"
 DEFAULT_MAX_OUTPUT_TOKENS = 4000
 
 
@@ -141,21 +140,18 @@ class LiveTransport:
         return {"json": response.json(), "latency_ms": int((time.perf_counter() - started) * 1000)}
 
 
-class FireworksTransport(LiveTransport):
-    """Muse Spark Open on Fireworks serverless. The same Responses shape, with two differences:
-    `include` only takes logprobs there, and its reasoning items carry readable summaries, not encrypted content."""
+class OpenWeightsTransport(LiveTransport):
+    """Muse Spark Open through an inference partner. The same Responses shape, except `include`: Fireworks takes only
+    logprobs there, and this model's reasoning replays without encrypted content, so it is dropped for every partner."""
 
     def __init__(self, settings: Settings) -> None:
-        if not settings.fireworks_api_key:
-            raise RuntimeError("FIREWORKS_API_KEY is not set; Muse Spark Open needs it")
+        if not settings.open_api_key:
+            raise RuntimeError(f"Muse Spark Open needs {OPEN_PROVIDERS[settings.open_provider][0]} in .env")
         from openai import OpenAI
 
         self.settings = settings
         self.sdk = OpenAI(
-            api_key=settings.fireworks_api_key,
-            base_url=settings.fireworks_base_url,
-            max_retries=4,
-            timeout=180,
+            api_key=settings.open_api_key, base_url=settings.open_base_url, max_retries=4, timeout=180
         )
 
     def responses(self, request: dict, purpose: str, req_hash: str) -> dict:
@@ -259,12 +255,12 @@ class MetaClient:
                 raise ValueError("record mode needs a cassette name")
             self.writer = CassetteWriter(self.settings.replay_dir, cassette)
             self.transport = RecordingTransport(LiveTransport(self.settings), self.writer)
-            if self.settings.fireworks_api_key:
-                self.open_transport = RecordingTransport(FireworksTransport(self.settings), self.writer)
+            if self.settings.open_api_key:
+                self.open_transport = RecordingTransport(OpenWeightsTransport(self.settings), self.writer)
         else:
             self.transport = LiveTransport(self.settings)
-            if self.settings.fireworks_api_key:
-                self.open_transport = FireworksTransport(self.settings)
+            if self.settings.open_api_key:
+                self.open_transport = OpenWeightsTransport(self.settings)
 
     # ---- public API --------------------------------------------------------------------
 
@@ -293,7 +289,9 @@ class MetaClient:
             if effort:
                 request["reasoning"] = {"effort": effort}
         req_hash = request_hash(request)
-        endpoint = OPEN_ENDPOINT if model == self.settings.spark_open_model else RESPONSES_ENDPOINT
+        endpoint = RESPONSES_ENDPOINT
+        if model == self.settings.spark_open_model:
+            endpoint = f"{self.settings.open_provider}:{RESPONSES_ENDPOINT}"
         self._refuse_or_pass(purpose, model, endpoint, effort, req_hash, request)
         try:
             result = self._transport_for(model).responses(request, purpose, req_hash)
@@ -376,7 +374,9 @@ class MetaClient:
     def _transport_for(self, model: str) -> Transport:
         if self.routes_open and model == self.settings.spark_open_model:
             if self.open_transport is None:
-                raise RuntimeError("Muse Spark Open needs FIREWORKS_API_KEY in .env")
+                raise RuntimeError(
+                    f"Muse Spark Open needs {OPEN_PROVIDERS[self.settings.open_provider][0]} in .env"
+                )
             return self.open_transport
         return self.transport
 
@@ -396,7 +396,7 @@ class MetaClient:
 
     def _redact(self, value: Any) -> str:
         text = str(value)
-        for key in (self.settings.api_key, self.settings.fireworks_api_key):
+        for key in (self.settings.api_key, self.settings.open_api_key):
             if key:
                 text = text.replace(key, "<KEY>")
         return text
