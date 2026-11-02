@@ -1,3 +1,4 @@
 # Muse Code session log
 | # | Start (ET) | Goal | Prompt summary | Files | Outcome | Human fixes | Commits |
 |---|---|---|---|---|---|---|---|
+| 1 | 2026-11-02 14:03 EST | Task 1 datagen + Task 2 vision | Full MUSE_CODE.md brief: build datagen and vision pipeline, live run (max 5), ruff, log | datagen/generate.py, datagen/scenario.yaml, datagen/tests/test_datagen.py, backend/vision/*.py (pipeline, sam, label_reader, overlay, prompts, video), backend/tests/vision/test_vision.py, data/generated/*, data/rack/sample_rack_overlay.png | datagen: 512 alerts (180/60/40/232), 3000 logs, 12 KB, all schema-valid, deterministic; vision: 11 FakeMetaClient tests pass; live run 5/5 boxed 14 devices, accuracy 11/14 ids and 9/14 serials vs cmdb_seed.json, overlay PNG written, final-run cost $0.0496 (7 calls) | none (autonomous) | vision-datagen commit with Agent trailer |

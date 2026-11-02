@@ -1,0 +1,44 @@
+# Scenario for datagen. Devices MUST match data/rack/layout.json
+# (ids, hostnames, serials, topology). The layout file is the source of truth.
+client_id: Acme Dental Group
+rack_id: RACK-A
+rack_label: RACK-A
+total_u: 42
+gateway_device_id: dev_A_10
+devices:
+  - {id: dev_A_42, u_start: 42, u_end: 42, device_type: patch_panel, make: Panduit, model: CP48BLY, serial: null, hostname: PP-01, mgmt_ip: null, uplink_device_id: null}
+  - {id: dev_A_41, u_start: 41, u_end: 41, device_type: switch, make: Cisco, model: Catalyst 9300-48P, serial: FOC2231X0AB, hostname: SW-CORE-01, mgmt_ip: 192.0.2.2, uplink_device_id: dev_A_10}
+  - {id: dev_A_39, u_start: 39, u_end: 39, device_type: patch_panel, make: Panduit, model: CP24BLY, serial: null, hostname: PP-02, mgmt_ip: null, uplink_device_id: null}
+  - {id: dev_A_38, u_start: 38, u_end: 38, device_type: switch, make: Cisco, model: Catalyst 9200L-48P, serial: JAE24180K7M, hostname: SW-ACC-01, mgmt_ip: 192.0.2.3, uplink_device_id: dev_A_41}
+  - {id: dev_A_30, u_start: 30, u_end: 31, device_type: server, make: Dell, model: PowerEdge R650, serial: 7RK2YT3, hostname: SRV-APP01, mgmt_ip: 198.51.100.30, uplink_device_id: dev_A_38}
+  - {id: dev_A_20, u_start: 20, u_end: 21, device_type: server, make: HPE, model: ProLiant DL20 Gen10, serial: CZJ21904QH, hostname: SRV-VOIP01, mgmt_ip: 198.51.100.20, uplink_device_id: dev_A_12}
+  - {id: dev_A_16, u_start: 16, u_end: 16, device_type: kvm, make: ATEN, model: CS1716A, serial: Z3N7Q08812, hostname: KVM-01, mgmt_ip: 192.0.2.16, uplink_device_id: dev_A_38}
+  - {id: dev_A_12, u_start: 12, u_end: 12, device_type: switch, make: Cisco, model: Catalyst 9200L-24P, serial: JAE24190LQ2, hostname: SW-ACC-02, mgmt_ip: 192.0.2.12, uplink_device_id: dev_A_41}
+  - {id: dev_A_10, u_start: 10, u_end: 10, device_type: firewall, make: Fortinet, model: FortiGate 60F, serial: FGT60FTK21004417, hostname: FW-01, mgmt_ip: 192.0.2.1, uplink_device_id: null}
+  - {id: dev_A_08, u_start: 8, u_end: 9, device_type: server, make: Dell, model: PowerEdge R650, serial: 4HN8ZS2, hostname: SRV-DC01, mgmt_ip: 198.51.100.8, uplink_device_id: dev_A_12}
+  - {id: dev_A_06, u_start: 6, u_end: 7, device_type: server, make: Dell, model: PowerEdge R650, serial: 9BW3KD1, hostname: SRV-FILE01, mgmt_ip: 198.51.100.6, uplink_device_id: dev_A_12}
+  - {id: dev_A_04, u_start: 4, u_end: 5, device_type: storage, make: Synology, model: RS1221+, serial: 2240TGR8K31, hostname: NAS-01, mgmt_ip: 198.51.100.4, uplink_device_id: dev_A_12}
+  - {id: dev_A_02, u_start: 2, u_end: 3, device_type: ups, make: APC, model: SMT1500RM2U, serial: AS2219141877, hostname: UPS-01, mgmt_ip: 192.0.2.102, uplink_device_id: dev_A_12}
+  - {id: dev_A_01, u_start: 1, u_end: 1, device_type: pdu, make: APC, model: AP7920B, serial: ZA2147008531, hostname: PDU-01, mgmt_ip: 192.0.2.101, uplink_device_id: dev_A_12}
+incidents:
+  - id: INC-A
+    root_cause_device_id: dev_A_12
+    title: SW-ACC-02 port-channel flap from a bad SFP
+    window_start: "2026-11-02T02:03:00Z"
+    window_end: "2026-11-02T02:40:00Z"
+    alert_count_512: 180
+    acceptable_fix_ids: [FIX-SFP-REPLACE, FIX-PO-SHUT-NOSHUT]
+  - id: INC-B
+    root_cause_device_id: dev_A_04
+    title: NAS-01 volume full, backup jobs fail
+    window_start: "2026-11-02T01:10:00Z"
+    window_end: "2026-11-02T02:20:00Z"
+    alert_count_512: 60
+    acceptable_fix_ids: [FIX-NAS-PRUNE-SNAPSHOTS, FIX-NAS-EXPAND-QUOTA]
+  - id: INC-C
+    root_cause_device_id: dev_A_10
+    title: FW-01 SSL-VPN certificate expired
+    window_start: "2026-11-02T00:00:00Z"
+    window_end: "2026-11-02T02:12:00Z"
+    alert_count_512: 40
+    acceptable_fix_ids: [FIX-CERT-RENEW-ACME]

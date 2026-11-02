@@ -1,0 +1,38 @@
+[
+  {
+    "email": "jane.doe@clientco.example",
+    "name": "Jane Doe",
+    "phone": "415-555-0132",
+    "username": "jdoe"
+  },
+  {
+    "email": "bob.smith@clientco.example",
+    "name": "Bob Smith",
+    "phone": "415-555-0147",
+    "username": "bsmith"
+  },
+  {
+    "email": "alice.ray@clientco.example",
+    "name": "Alice Ray",
+    "phone": "212-555-0176",
+    "username": "aray"
+  },
+  {
+    "email": "tom.beck@clientco.example",
+    "name": "Tom Beck",
+    "phone": "212-555-0119",
+    "username": "tbeck"
+  },
+  {
+    "email": "sara.kim@clientco.example",
+    "name": "Sara Kim",
+    "phone": "312-555-0158",
+    "username": "skim"
+  },
+  {
+    "email": "dan.cole@clientco.example",
+    "name": "Dan Cole",
+    "phone": "312-555-0123",
+    "username": "dcole"
+  }
+]
