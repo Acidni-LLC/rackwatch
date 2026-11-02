@@ -14,7 +14,7 @@ from pathlib import Path
 
 from .config import Settings
 from .events import emit, now_iso
-from .meta_client import MetaClient
+from .meta_client import MetaClient, ReplayTransport
 from .pii import PiiScrubber
 from .store import all_devices, contact_names, load_contacts
 
@@ -119,7 +119,8 @@ def add_voice_note(
     if incident is None:
         raise KeyError(incident_id)
     scrubber = PiiScrubber(conn, names=contact_names(load_contacts(settings.generated_dir)))
-    wav = to_wav(audio, settings) if audio else audio
+    # A replay serves the recorded transcript and never reads the audio, so it must not need ffmpeg.
+    wav = audio if isinstance(client.transport, ReplayTransport) else to_wav(audio, settings)
     result = client.transcribe(purpose="voice_note", audio=wav, keywords=keywords_for(conn, incident))
     transcript = scrubber.scrub(str(result.get("transcript", "")))
     line = None

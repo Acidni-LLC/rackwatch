@@ -32,36 +32,45 @@ def _seed_match(conn: sqlite3.Connection, device: Device) -> sqlite3.Row | None:
     return None
 
 
-def merge_scan(conn: sqlite3.Connection, scan: RackScanResult) -> list[Device]:
-    """Vision supplies what it saw; the seed keeps what a camera cannot see (management IP and uplink).
+def merge_scan(conn: sqlite3.Connection, scan: RackScanResult, seeded_rack: bool) -> list[Device]:
+    """Keep what vision read for the UI, and keep the agent's CMDB stable (DESIGN.md §8.2).
 
-    A scanned device matched to a seed row by label but placed at a different U keeps the seed's id and position
-    and is flagged for review, so a misread rail never forks the CMDB. A device with no match is added as it stands.
+    On the seeded rack the CMDB devices are the ground-truth devices, so vision output is stored and diffed
+    rather than written over them: a seeded row only gains its box and confidence. Scanned devices that match
+    a seed row by label take its id, so the photo, the table and the agent all agree on identity. On any other
+    photo, unmatched devices are new hardware and join the CMDB as they stand.
     """
-    merged: dict[str, Device] = {}
+    scanned: list[Device] = []
     for device in scan.devices:
         row = _seed_match(conn, device)
         if row is None:
-            merged[device.id] = device
+            scanned.append(device)
+            if not seeded_rack:
+                upsert_devices(conn, [device])
             continue
         seed = row_to_device(row)
-        moved = seed.id != device.id or (seed.u_start, seed.u_end) != (device.u_start, device.u_end)
-        merged[seed.id] = device.model_copy(
-            update={
-                "id": seed.id,
-                "u_start": seed.u_start,
-                "u_end": seed.u_end,
-                "make": device.make or seed.make,
-                "model": device.model or seed.model,
-                "serial": device.serial or seed.serial,
-                "hostname": device.hostname or seed.hostname,
-                "mgmt_ip": device.mgmt_ip or seed.mgmt_ip,
-                "uplink_device_id": device.uplink_device_id or seed.uplink_device_id,
-                "needs_review": device.needs_review or moved,
-            }
+        moved = (seed.u_start, seed.u_end) != (device.u_start, device.u_end)
+        scanned.append(
+            device.model_copy(
+                update={
+                    "id": seed.id,
+                    "mgmt_ip": seed.mgmt_ip,
+                    "uplink_device_id": seed.uplink_device_id,
+                    "needs_review": device.needs_review or moved,
+                }
+            )
         )
-    upsert_devices(conn, merged.values())
-    return list(merged.values())
+        conn.execute(
+            "UPDATE devices SET bbox = ?, confidence = ?, field_confidence = ?, source_image = ?, source = 'vision' WHERE id = ?",
+            (
+                json.dumps(device.bbox.model_dump()) if device.bbox else None,
+                device.confidence,
+                json.dumps(device.field_confidence),
+                device.source_image,
+                seed.id,
+            ),
+        )
+    return scanned
 
 
 def scan_and_store(
@@ -79,11 +88,10 @@ def scan_and_store(
         str(seed_path) if seed_path.exists() else None,
         overlay_path=str(RUNS_DIR / f"{run_id}_overlay.png"),
     )
-    merged = merge_scan(conn, scan)
-    overlay = scan.overlay_path or ""
+    scanned = merge_scan(conn, scan, seeded_rack=Path(image_path).resolve() == SAMPLE_IMAGE.resolve())
     conn.execute(
-        "INSERT OR REPLACE INTO rack_scans (run_id, rack_id, image_path, image_w, image_h, total_u, overlay_path, accuracy, created_at) "
-        "VALUES (?,?,?,?,?,?,?,?,?)",
+        "INSERT OR REPLACE INTO rack_scans (run_id, rack_id, image_path, image_w, image_h, total_u, overlay_path, accuracy, devices, "
+        "created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
         (
             run_id,
             scan.rack_id,
@@ -91,13 +99,14 @@ def scan_and_store(
             scan.image_w,
             scan.image_h,
             scan.total_u,
-            overlay,
+            scan.overlay_path or "",
             json.dumps(scan.accuracy),
+            json.dumps([d.model_dump() for d in scanned]),
             now_iso(),
         ),
     )
     state = current_state(conn)
-    emit(conn, run_id, "scan_finished", {"devices": len(merged), "accuracy": scan.accuracy})
+    emit(conn, run_id, "scan_finished", {"devices": len(scanned), "accuracy": scan.accuracy})
     return state
 
 
@@ -116,13 +125,14 @@ def _public_path(path: str | None) -> str | None:
 
 
 def current_state(conn: sqlite3.Connection) -> dict:
-    """The CMDB as the UI shows it: the seeded rack until a scan has happened."""
+    """`devices` is what the table shows: the latest scan's readings, or the seed. `cmdb` is what the agent uses."""
     scan = conn.execute("SELECT * FROM rack_scans ORDER BY created_at DESC LIMIT 1").fetchone()
-    devices = [d.model_dump() for d in all_devices(conn)]
+    cmdb = [d.model_dump() for d in all_devices(conn)]
     if scan is None:
         return {
             "scanned": False,
-            "devices": devices,
+            "devices": cmdb,
+            "cmdb": cmdb,
             "image_url": "/files/rack/sample_rack.jpg" if SAMPLE_IMAGE.exists() else None,
             "image_w": None,
             "image_h": None,
@@ -133,7 +143,8 @@ def current_state(conn: sqlite3.Connection) -> dict:
         }
     return {
         "scanned": True,
-        "devices": devices,
+        "devices": sorted(json.loads(scan["devices"]), key=lambda d: -d["u_start"]),
+        "cmdb": cmdb,
         "image_url": _public_path(scan["image_path"]),
         "image_w": scan["image_w"],
         "image_h": scan["image_h"],
@@ -142,3 +153,28 @@ def current_state(conn: sqlite3.Connection) -> dict:
         "accuracy": json.loads(scan["accuracy"]) if scan["accuracy"] else None,
         "run_id": scan["run_id"],
     }
+
+
+def edit_device(conn: sqlite3.Connection, device_id: str, fields: dict) -> dict | None:
+    """A person's correction wins everywhere: in the CMDB and in the scan the table is showing."""
+    row = conn.execute("SELECT * FROM devices WHERE id = ?", (device_id,)).fetchone()
+    scan = conn.execute("SELECT run_id, devices FROM rack_scans ORDER BY created_at DESC LIMIT 1").fetchone()
+    updated = None
+    if row is not None and fields:
+        assignments = ", ".join(f"{k} = ?" for k in fields)
+        conn.execute(
+            f"UPDATE devices SET {assignments}, source = 'manual', needs_review = 0 WHERE id = ?",
+            [*fields.values(), device_id],
+        )
+    if row is not None:
+        updated = row_to_device(
+            conn.execute("SELECT * FROM devices WHERE id = ?", (device_id,)).fetchone()
+        ).model_dump()
+    if scan is not None:
+        rows = json.loads(scan["devices"])
+        for item in rows:
+            if item["id"] == device_id:
+                item.update(fields, source="manual", needs_review=False)
+                updated = updated or item
+        conn.execute("UPDATE rack_scans SET devices = ? WHERE run_id = ?", (json.dumps(rows), scan["run_id"]))
+    return updated

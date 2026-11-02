@@ -44,6 +44,7 @@ export interface Device {
 export interface RackState {
   scanned: boolean;
   devices: Device[];
+  cmdb: Device[];
   image_url: string | null;
   image_w: number | null;
   image_h: number | null;

@@ -183,7 +183,7 @@ export default function IncidentDetail({ status, runId, incidentId }: { status: 
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-[210px_minmax(0,1.1fr)_minmax(0,1fr)]">
         <Section tag={device ? `${device.rack_id} U${device.u_start === device.u_end ? device.u_start : `${device.u_start}-${device.u_end}`}` : "RACK"}>
           <div className="p-2">
-            <RackMini devices={incident.rack.devices} highlightId={incident.root_cause_device_id} totalU={incident.rack.total_u} />
+            <RackMini devices={incident.rack.cmdb} highlightId={incident.root_cause_device_id} totalU={incident.rack.total_u} />
             {device ? (
               <p className="mt-2 font-mono text-[11.5px] leading-snug text-dim">
                 <span className="text-ink">{device.hostname}</span>

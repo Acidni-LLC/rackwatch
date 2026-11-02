@@ -28,7 +28,6 @@ from .events import emit, events_after, now_iso
 from .meta_client import MetaClient
 from .pii import PiiScrubber
 from .replay import cassette_path
-from .schemas import Device
 
 TRIAGE_CASSETTE = "triage_pass_after_replan"
 VOICE_CASSETTE = "voice_note"
@@ -202,19 +201,11 @@ class DevicePatch(BaseModel):
 
 
 @app.patch("/api/devices/{device_id}")
-def edit_device(device_id: str, patch: DevicePatch) -> Device:
-    c = conn()
-    row = c.execute("SELECT * FROM devices WHERE id = ?", (device_id,)).fetchone()
-    if row is None:
+def edit_device(device_id: str, patch: DevicePatch) -> dict:
+    updated = rack.edit_device(conn(), device_id, patch.model_dump(exclude_unset=True))
+    if updated is None:
         raise HTTPException(404, "no such device")
-    fields = patch.model_dump(exclude_unset=True)
-    if fields:
-        assignments = ", ".join(f"{k} = ?" for k in fields)
-        c.execute(
-            f"UPDATE devices SET {assignments}, source = 'manual', needs_review = 0 WHERE id = ?",
-            [*fields.values(), device_id],
-        )
-    return store.row_to_device(c.execute("SELECT * FROM devices WHERE id = ?", (device_id,)).fetchone())
+    return updated
 
 
 @app.get("/files/{path:path}")

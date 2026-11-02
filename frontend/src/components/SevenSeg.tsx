@@ -13,7 +13,6 @@ const SEGMENTS: Record<string, string> = {
   "9": "abcdfg",
   "-": "g",
   " ": "",
-  "$": "afgcd",
   E: "afged",
   F: "afge",
 };

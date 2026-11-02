@@ -38,7 +38,7 @@ export default function Incidents({ status, runId }: { status: Status | null; ru
 
   useEffect(() => {
     get<AlertsResponse>("/api/alerts").then((d) => setAlerts(d.alerts));
-    get<RackState>("/api/rack").then((d) => setDevices(d.devices));
+    get<RackState>("/api/rack").then((d) => setDevices(d.cmdb));
   }, []);
 
   useEffect(() => {
