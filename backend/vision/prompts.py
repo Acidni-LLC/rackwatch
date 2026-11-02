@@ -9,11 +9,16 @@ from __future__ import annotations
 
 CONCEPT_PROMPTS = ["rack-mounted device", "network switch", "server", "patch panel"]
 
+STICKER_PROMPT = "white label"
+
 RACK_FRAME_SYSTEM = "You are reading a photo of a server rack. Return JSON only."
 
 RACK_FRAME_PROMPT = (
-    "Return {rack_top_y, rack_bottom_y, total_u, rail_numbers_visible:bool, "
+    "Return {rail_top_y, rail_bottom_y, total_u, rail_numbers_visible:bool, "
     "rack_label:string|null}. "
+    "rail_top_y is the y of the top edge of the highest-numbered rack unit, "
+    "rail_bottom_y is the y of the bottom edge of unit 1. Read them off the "
+    "numbered rails on the left and right sides, not the outer rack frame. "
     "Coordinates are on a normalized 0-1000 grid over this image "
     "(0,0 is the top-left, 1000,1000 the bottom-right), not pixels."
 )
@@ -28,12 +33,17 @@ LABEL_SYSTEM = (
 
 CROP_PROMPT = (
     "Read each crop (crop_id shown first) plus the full-rack thumbnail for context. "
-    "Coordinates below are on a normalized 0-1000 grid, not pixels. "
+    "Each crop spans from the left rail to the device's right edge: the rail carries "
+    "printed unit numbers, and the device face carries a white asset sticker with "
+    "the hostname and serial. "
     "Return {devices:[{crop_id, device_type, make, model, serial, hostname, "
     "u_label:int|null, u_height:int, field_confidence:{make, model, serial, u}, evidence}]}. "
     "device_type is one of switch, server, firewall, router, ups, pdu, patch_panel, "
-    "storage, kvm, blank, other. u_label is the printed rail number at the bottom "
-    "of the device, or null when not legible."
+    "storage, kvm, blank, other. If several labels are visible, report the one "
+    "closest to the crop center. u_label is the printed rail number aligned with the "
+    "bottom of the device, or null when not legible. "
+    "Set a field confidence below 0.6 for anything partly legible, and null for "
+    "anything you cannot read."
 )
 
 # Grounding prompt that returned usable boxes in the live preflight (MUSE_CODE.md addenda).
@@ -91,13 +101,13 @@ FRAME_JSON_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
     "properties": {
-        "rack_top_y": {"type": "number"},
-        "rack_bottom_y": {"type": "number"},
+        "rail_top_y": {"type": "number"},
+        "rail_bottom_y": {"type": "number"},
         "total_u": {"type": "number"},
         "rail_numbers_visible": {"type": "boolean"},
         "rack_label": {"type": ["string", "null"]},
     },
-    "required": ["rack_top_y", "rack_bottom_y", "total_u", "rail_numbers_visible", "rack_label"],
+    "required": ["rail_top_y", "rail_bottom_y", "total_u", "rail_numbers_visible", "rack_label"],
 }
 
 GROUNDING_JSON_SCHEMA = {
