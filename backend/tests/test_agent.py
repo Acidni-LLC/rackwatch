@@ -329,8 +329,8 @@ def test_last_turn_forces_a_submission(world):
     lookup = lambda request, purpose: fake_tool_call("cmdb_lookup", {"query": "FW-01"})  # noqa: E731
     client = FakeMetaClient(responder=lookup, settings=world.settings, conn=world.conn, run_id="run_a")
     run_triage(world.conn, client, world.settings, max_turns=3, max_attempts=1)
-    assert "tool_choice" not in client.requests[0]
-    assert client.requests[2]["tool_choice"] == {"type": "function", "name": "submit_incidents"}
+    assert len(client.requests[0]["tools"]) > 1
+    assert [d["name"] for d in client.requests[2]["tools"]] == ["submit_incidents"]
 
 
 def test_demo_strict_first_attempt_is_low_effort_with_a_small_cap(world):
@@ -347,3 +347,19 @@ def test_demo_strict_first_attempt_is_low_effort_with_a_small_cap(world):
     assert result.status == "passed" and result.attempts == 2
     assert all(r["reasoning"] == {"effort": "low"} for r in client.requests[:6])
     assert client.requests[6]["reasoning"] == {"effort": "high"}
+
+
+def test_malformed_submissions_come_back_as_feedback(world):
+    script = [
+        investigate(),
+        drafts(),
+        fake_tool_call("submit_incidents", {"incidents": ["not an object"], "noise_alert_ids": []}),
+        fake_tool_call("submit_incidents", {"incidents": "not json", "noise_alert_ids": []}, call_id="c2"),
+        fake_tool_call(
+            "submit_incidents",
+            {"incidents": json.dumps(submission()["incidents"]), "noise_alert_ids": SELECT_NOISE},
+            call_id="c3",
+        ),
+    ]
+    result = run_triage(world.conn, client_for(world, script), world.settings)
+    assert result.status == "passed" and result.attempts == 1

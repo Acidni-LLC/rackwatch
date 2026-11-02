@@ -154,7 +154,7 @@ def _vision_worker(run_id: str, image_path: str, replay: bool, speed: float) -> 
         rack.scan_and_store(c, client, s, run_id, image_path)
         finish_run(c, run_id, "passed", 1)
     except Exception as error:
-        emit(c, run_id, "error", {"message": f"{type(error).__name__}: {error}"})
+        emit(c, run_id, "run_error", {"message": f"{type(error).__name__}: {error}"})
         finish_run(c, run_id, "error", 1)
     finally:
         c.close()
@@ -298,7 +298,7 @@ def _triage_worker(run_id: str, replay: bool, speed: float, demo_strict: bool) -
         client = _client_for_run(s, c, run_id, replay, TRIAGE_CASSETTE, speed)
         run_triage(c, client, s, run_id=run_id, demo_strict=demo_strict)
     except Exception as error:
-        emit(c, run_id, "error", {"message": f"{type(error).__name__}: {error}"})
+        emit(c, run_id, "run_error", {"message": f"{type(error).__name__}: {error}"})
         finish_run(c, run_id, "error", 0)
     finally:
         c.close()

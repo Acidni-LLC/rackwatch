@@ -25,6 +25,7 @@ from ..store import all_alerts, all_devices, contact_names, load_contacts, load_
 from ..verifier.verify import VerifierInputs, load_allowlist, load_ground_truth, verify
 from . import digest, prompts, router, selectors
 from .tools import DEFINITIONS, ToolContext, run_tool
+from .tools.submit import DEFINITION as SUBMIT_DEFINITION
 
 MAX_TURNS = 24
 MAX_ATTEMPTS = 3
@@ -177,7 +178,17 @@ class Harness:
     def on_submit(self, args: dict) -> dict:
         errors: list[str] = []
         incidents = []
-        for raw in args.get("incidents") or []:
+        raw_incidents = args.get("incidents") or []
+        if isinstance(raw_incidents, str):  # some turns send the array as a JSON string
+            try:
+                raw_incidents = json.loads(raw_incidents)
+            except json.JSONDecodeError:
+                return {
+                    "error": "incidents must be an array of objects, not a string. Call submit_incidents again."
+                }
+        if not isinstance(raw_incidents, list) or not all(isinstance(r, dict) for r in raw_incidents):
+            return {"error": "incidents must be an array of objects. Call submit_incidents again."}
+        for raw in raw_incidents:
             expanded, errs = selectors.expand_items(self.conn, list(raw.get("alert_ids") or []))
             errors.extend(errs)
             incidents.append({**raw, "alert_ids": expanded})
@@ -281,23 +292,18 @@ def run_triage(
                 if turn == turn_cap:
                     messages.append({"role": "user", "content": prompts.LAST_TURN_NUDGE})
                 effort = router.pick_effort(turn, ctx.drafted, strict_now)
-                # The last turn must submit, so a rushed plan reaches the verifier rather than timing out unseen.
-                forced = (
-                    {"tool_choice": {"type": "function", "name": "submit_incidents"}}
-                    if turn == turn_cap
-                    else {}
-                )
+                # On the last turn submit_incidents is the only tool on offer, so a rushed plan reaches the verifier
+                # rather than timing out unseen. The API supports only tool_choice "auto", so it cannot be forced.
                 response = client.responses(
                     purpose=router.purpose_for(effort, attempt),
                     model=settings.spark_model,
                     instructions=prompts.SYSTEM_PROMPT,
                     input=messages,
-                    tools=DEFINITIONS,
+                    tools=[SUBMIT_DEFINITION] if turn == turn_cap else DEFINITIONS,
                     effort=effort,
                     max_output_tokens=MAX_OUTPUT[effort],
                     store=False,
                     include=["reasoning.encrypted_content"],
-                    **forced,
                 )
                 messages = messages + response.output
                 _emit_reasoning(conn, run_id, attempt, turn, response.output)
@@ -340,7 +346,7 @@ def run_triage(
         status, error_text = "error", client._redact(f"{type(error).__name__}: {error}")
 
     if error_text:
-        emit(conn, run_id, "error", {"message": error_text})
+        emit(conn, run_id, "run_error", {"message": error_text})
     if status == "failed" and harness.incident_ids:
         conn.execute("UPDATE incidents SET status = 'failed' WHERE run_id = ?", (run_id,))
     finish_run(conn, run_id, status, attempt)

@@ -93,7 +93,7 @@ function reducer(state: RunState, action: Action): RunState {
     case "scan_finished":
       next.scanFinished = true;
       break;
-    case "error":
+    case "run_error":
       next.error = data.message;
       break;
     case "run_finished":
@@ -114,7 +114,7 @@ const EVENT_TYPES = [
   "submission",
   "verifier",
   "replan",
-  "error",
+  "run_error", // not "error": that name is the EventSource connection event
   "scan_started",
   "scan_finished",
   "run_finished",

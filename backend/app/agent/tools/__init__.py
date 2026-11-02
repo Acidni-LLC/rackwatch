@@ -17,10 +17,6 @@ from ...schemas import SimState
 from . import alerts, cmdb, drafts, kb, logs, netsim, submit
 
 
-class ToolError(ValueError):
-    """Bad arguments. The model sees the message and can correct itself."""
-
-
 @dataclass
 class ToolContext:
     conn: sqlite3.Connection
@@ -74,8 +70,10 @@ def run_tool(ctx: ToolContext, name: str, raw_arguments: str | dict) -> dict:
         else:
             try:
                 result = tool(ctx, args)
-            except (ValueError, KeyError, TypeError) as error:
-                result = {"error": f"{name}: {error}"}
+            except (ValueError, KeyError, TypeError, AttributeError) as error:
+                result = {
+                    "error": f"{name}: {type(error).__name__}: {error}. Check the arguments and call it again."
+                }
     result = ctx.scrubber.scrub_obj(result)
     ctx.conn.execute(
         "INSERT INTO tool_calls (run_id, attempt, turn, name, args, result, ts) VALUES (?,?,?,?,?,?,?)",
