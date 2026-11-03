@@ -1,6 +1,6 @@
 # Decisions
 
-Where DESIGN.md was ambiguous, or a live finding changed it. The build instructions ask for the simplest option, noted here.
+Where DESIGN.md was ambiguous, or a live finding changed it. The build instructions asked for the simplest option, noted here.
 
 | # | Decision | Why |
 |---|---|---|
@@ -24,6 +24,7 @@ Where DESIGN.md was ambiguous, or a live finding changed it. The build instructi
 | D-018 | `hosted` stays the default engine, with open weights one click away. The `mixed` engine stays in the code but is not recommended. | `muse-spark-1.3` is the model DESIGN.md builds on, and a key for it is all a live run needs. In 5 runs each, `open` averaged $0.18 and 38 s against $0.30 and 58 s for `hosted`, at the same F1, and `mixed` averaged $0.37 and 138 s because 70 of its 86 turns ran at high effort on the hosted model. |
 | D-019 | The rack scan is scored on whole U spans (`span_matched`) as well as the pipeline's `u_matched`, and the UI shows the span score. | `u_matched` compares only the bottom unit, so it calls a 2U server at U20-20 correct. The pipeline is Muse Code's, so the integrator's score lives in `app/rack.py`. |
 | D-020 | Overlay boxes are snapped to the fitted U grid after SAM finds the devices, except a box whose U disagrees with its own label, which keeps its SAM box. | SAM boxes on this rack hugged the label stickers and one ran past the rack frame. Snapping shows the decided position, and a wrong U still looks wrong. |
+| D-021 | The build instructions file is retired on Nov 3. Its rules that still apply moved into `AGENTS.md`. | The build it ordered is done, and Muse Code warned that it ignores that file when `AGENTS.md` sits beside it. One rules file keeps every agent on the same rules. |
 
 ## Glossary
 | Term | Meaning |
