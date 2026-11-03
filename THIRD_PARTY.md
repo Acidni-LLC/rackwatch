@@ -4,6 +4,7 @@
 | Model | Endpoint | Terms |
 |---|---|---|
 | muse-spark-1.3 | Meta Model API, https://api.meta.ai/v1/responses | Meta Model API terms |
+| Muse Spark Open | Baseten, https://inference.baseten.co/v1 (Fireworks also works) | Muse Model License and the partner's terms |
 | sam-3.1 | Meta Model API, /v1/responses | Meta Model API terms |
 | muse-voice-transcribe-1.0 | Meta Model API, /v1/asr/transcribe | Meta Model API terms |
 
@@ -12,6 +13,7 @@
 |---|---|
 | Muse Code (Meta) | Wrote `backend/vision/` and `datagen/`; see docs/muse-code-log.md |
 | muse-image-1.0 (Meta) | Made the sample rack image photorealistic (`scripts/photoreal_rack.py`) |
+| Playwright | Recorded the demo GIF (`scripts/record_demo.py`). Not in the requirements files |
 | Windows speech synthesis | Generated the sample voice note (`scripts/make_sample_note.ps1`). Not a runtime dependency |
 | ffmpeg via imageio-ffmpeg | Local transcoding in dev. Replay needs no ffmpeg; live voice notes need a system ffmpeg or this package |
 
@@ -66,3 +68,14 @@ Chivo and Chivo Mono are by Omnibus-Type, under the SIL Open Font License, and a
 
 ## System
 SQLite (public domain, via Python's standard library). ffmpeg (LGPL/GPL) is an external binary used only for live voice notes and is not redistributed in this repository.
+
+## Glossary
+| Term | Meaning |
+|---|---|
+| API | Application programming interface |
+| ASR | Automatic speech recognition |
+| BSD | Berkeley Software Distribution, a family of open source licenses |
+| GPL, LGPL | GNU General Public License and its Lesser variant |
+| MIT | The MIT open source license, named for the Massachusetts Institute of Technology |
+| OFL | SIL Open Font License |
+| SAM | Segment Anything Model |

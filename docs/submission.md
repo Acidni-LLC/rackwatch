@@ -27,7 +27,7 @@ Run it live or use Replay. Replay shows real recorded calls, and the screen labe
 
 - **0:00–0:05, required disclosure.** "Everything in this demo was built during the hackathon. Nothing was pre-existing."
 - **0:05–0:15, the hook.** Alert wall on screen. "2:07 AM. 512 alerts. One tech. Which one matters?"
-- **0:15–0:45, the rack.** Rack tab, Scan. Boxes land on each device and the CMDB (configuration management database) fills. Point at the accuracy line and at an amber cell: it flags what it isn't sure of.
+- **0:15–0:45, the rack.** Rack tab, Scan. Boxes land on each device and the CMDB (configuration management database) fills. Point at the accuracy line and at an amber cell: it flags what it isn't sure of, and the usual miss, a 2U server read as 1U, is flagged.
 - **0:45–1:30, triage.** Alerts tab, then the strict live run or Replay. Tools stream on the left, Meta calls on the right.
 - **1:30–1:55, the rejection.** Attempt 1 lands and the lamps go red: alerts unassigned, U positions missing, drafts missing. The tiles sort wrongly, with 302 in noise. "It can't argue with this. It's plain Python." It re-plans. Attempt 2 goes green at 180, 60, 40 and 232 noise.
 - **1:55–2:15, the voice note.** Open the switch incident. Click a citation to show the real log line. Record the note, and it lands in the ticket.

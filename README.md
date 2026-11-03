@@ -47,7 +47,7 @@ Add `BASETEN_API_KEY` to `.env` and click **Live on open weights**, or run `pyth
 ## How it works
 See [docs/architecture.md](docs/architecture.md) for the diagram.
 
-1. **Rack to CMDB.** SAM 3.1 and Muse Spark find each device. Spark reads the labels and rail numbers. Anything uncertain is flagged for review, and a person can correct any cell.
+1. **Rack to CMDB.** SAM 3.1 and Muse Spark find each device. Spark reads the labels and rail numbers, and a line fitted to those numbers decides each device's U position. Boxes are then snapped to that grid, so the overlay shows the decision and not SAM's raw box. Anything uncertain is flagged for review, and a person can correct any cell.
 2. **Scrub.** Alerts and logs lose their PII (personally identifiable information) at ingest. Tokens like `<EMAIL_1>` map back only in a local table, and only after a person approves.
 3. **Investigate.** The agent gets a digest, not 512 alerts, and works through tools: `cmdb_lookup`, `list_alerts`, `log_search`, `ping_sim`, `dns_sim`, `kb_search`, `draft_ticket`, `draft_client_email`, `submit_incidents`.
 4. **Verify.** A plain Python verifier checks the submission. If it fails, the agent gets the reasons and re-plans, up to 3 attempts.
@@ -91,7 +91,16 @@ Measured on Nov 2, 2026 on the seeded dataset (seed 42), live. Raw numbers are i
 The verifier didn't care which model answered: Meta's open-weight model passed it every time, and took less time and money doing it. Five runs is too few to rank the engines on quality, so read the first-attempt row as noise until there are more. Mixed sends low-effort tool turns to Muse Spark Open and everything else to Muse Spark 1.3. We expected it to be the cheapest, and it was the slowest and the most expensive: 70 of its 86 turns ran at high effort, so they stayed on the hosted model, and Baseten handled only 16. Don't use it.
 
 **Rack scan, 5 runs of the sample image**
-VISION_RESULTS
+| | |
+|---|---|
+| Devices found at the right position | 11 to 14 of 14 (all 14 on 3 of 5 scans) |
+| Whole U span right, top and bottom | 9 to 12 of 14 |
+| Serial numbers read correctly | 10 to 12 of 14 |
+| Flagged for a person to check | 4 to 7 per scan |
+| Time | 138 s mean, 102 s to 224 s, mostly API latency |
+| Estimated cost | $0.07 mean |
+
+The usual miss is a 2U server recorded as 1U. In the scan we checked row by row, all three wrong devices were flagged for review, plus one that was right. Scans vary, so report the range. The shipped replay is the first take that reached 14 devices and 12 whole spans, which is better than typical, and its `meta.json` records how many takes that took.
 
 Costs are estimates from published prices and the usage each response reports. Meta and Baseten publish the same token prices for these models, so the cost difference comes from using fewer tokens, not from a cheaper rate.
 
@@ -101,9 +110,9 @@ Costs are estimates from published prices and the usage each response reports. M
 `budget.py` refuses a call before it's made if its estimate would pass $1.50 for the run or $120 in total. Totals persist in the call log. Every call sets `max_output_tokens`. Prompt caching does much of the work here: in the shipped recording, 54% of input tokens were cached. Tests use a fake client and cost nothing.
 
 ## What Muse Code built
-Two agents built this, and the commit trailers say which did what. Muse Code (`Agent: muse-code muse-spark-1.3`) wrote `backend/vision/` and `datagen/` in AGENT_SESSIONS logged sessions. Run `scripts/agent_stats.sh` for commit and line counts.
+Two agents built this, and the commit trailers say which did what. Muse Code (`Agent: muse-code muse-spark-1.3`) wrote `backend/vision/` and `datagen/` in 5 logged sessions. Run `scripts/agent_stats.sh` for commit and line counts.
 
-The contract came first (`backend/app/schemas.py`), Muse Code coded to it, and live runs drove the rest: its second and third sessions were bug reports with measured numbers from the integrator. Where the build departed from the original spec, [docs/decisions.md](docs/decisions.md) says why.
+The contract came first (`backend/app/schemas.py`), Muse Code coded to it, and live runs drove the rest: every session after its first was a bug report with measured numbers from the integrator. Its third session made accuracy worse, which the same evaluation caught, and the next two fixed it. Where the build departed from the original spec, [docs/decisions.md](docs/decisions.md) says why.
 
 ## Tests
 `pytest` covers every verifier rule with passing and failing fixtures, the PII scrubber (including false positives), tools, budget refusal, cassette round trips, scripted agent runs (pass, fail then re-plan, budget exhaustion), the API end to end in replay with no key, and the shipped recording itself. CI (continuous integration) runs them with no secrets, plus `ruff`, a secret scan and the frontend build.

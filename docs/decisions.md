@@ -22,3 +22,21 @@ Where DESIGN.md was ambiguous, or a live finding changed it. The build instructi
 | D-016 | High-effort turns get `max_output_tokens` 12,000 instead of §14's 4,000. | Reasoning tokens count toward the limit, so 4,000 risks truncating a planning turn. Low-effort turns keep 4,000. |
 | D-017 | Muse Spark Open, Meta's open-weight model, runs through an inference partner behind `MetaClient`, as an extra engine (`ENGINE=hosted|open|mixed`). Baseten is the default and Fireworks also works (`OPEN_PROVIDER`). The Glimmer LoRA router in §8.5 v2 is not built. | Self-hosting Spark Open takes at least 700 GB of VRAM (video memory), per its model card. Both partners serve it with the same Responses API and prices, and the PII guard, budget guard, call log and replay stay shared. Hard rule 2 names the Meta base URL; these are the only other endpoints, and they serve only a Meta model. A LoRA needs training time and a paid deployment this schedule lacks. |
 | D-018 | `hosted` stays the default engine, with open weights one click away. The `mixed` engine stays in the code but is not recommended. | `muse-spark-1.3` is the model DESIGN.md builds on, and a key for it is all a live run needs. In 5 runs each, `open` averaged $0.18 and 38 s against $0.30 and 58 s for `hosted`, at the same F1, and `mixed` averaged $0.37 and 138 s because 70 of its 86 turns ran at high effort on the hosted model. |
+| D-019 | The rack scan is scored on whole U spans (`span_matched`) as well as the pipeline's `u_matched`, and the UI shows the span score. | `u_matched` compares only the bottom unit, so it calls a 2U server at U20-20 correct. The pipeline is Muse Code's, so the integrator's score lives in `app/rack.py`. |
+| D-020 | Overlay boxes are snapped to the fitted U grid after SAM finds the devices, except a box whose U disagrees with its own label, which keeps its SAM box. | SAM boxes on this rack hugged the label stickers and one ran past the rack frame. Snapping shows the decided position, and a wrong U still looks wrong. |
+
+## Glossary
+| Term | Meaning |
+|---|---|
+| API | Application programming interface |
+| CC0 | Creative Commons Zero, a public domain dedication |
+| F1 | The harmonic mean of precision and recall |
+| LoRA | Low-rank adaptation, a way to fine-tune a model |
+| PII | Personally identifiable information |
+| PSA | Professional services automation |
+| RFC | Request for Comments, an internet standards document |
+| SAM | Segment Anything Model |
+| U | Rack unit, the standard height of rack equipment |
+| UAC | User Account Control, the Windows permission prompt |
+| VRAM | Video memory |
+| WSL | Windows Subsystem for Linux |
