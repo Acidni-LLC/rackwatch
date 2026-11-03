@@ -6,6 +6,8 @@ Snap a photo of a server rack and get a CMDB (configuration management database)
 
 ![The run view after verification: 512 alerts sorted into 3 incidents and a block of noise, with the verifier's two attempts above them](docs/screenshots/run-verified.png)
 
+![A replayed run: the rack scan, the alert wall, a failed first attempt, the re-plan, and three verified incidents](docs/demo.gif)
+
 MSPs (managed service providers) run IT for dozens of small clients with a few techs on nights. One failed switch fires hundreds of alerts across everything behind it, and at 2 AM someone has to work out that it's one incident, find the cause, open a ticket and email the client without saying anything false. RackWatch does the legwork and shows its evidence. A person still signs off.
 
 ## Meta models used
@@ -110,7 +112,7 @@ Costs are estimates from published prices and the usage each response reports. M
 `budget.py` refuses a call before it's made if its estimate would pass $1.50 for the run or $120 in total. Totals persist in the call log. Every call sets `max_output_tokens`. Prompt caching does much of the work here: in the shipped recording, 54% of input tokens were cached. Tests use a fake client and cost nothing.
 
 ## What Muse Code built
-Two agents built this, and the commit trailers say which did what. Muse Code (`Agent: muse-code muse-spark-1.3`) wrote `backend/vision/` and `datagen/` in 5 logged sessions. Run `scripts/agent_stats.sh` for commit and line counts.
+Two agents built this, and the `Agent:` line in each commit says which did what. Muse Code (`Agent: muse-code muse-spark-1.3`) wrote `backend/vision/` and `datagen/` in 5 logged sessions. Run `scripts/agent_stats.sh` for commit and line counts.
 
 The contract came first (`backend/app/schemas.py`), Muse Code coded to it, and live runs drove the rest: every session after its first was a bug report with measured numbers from the integrator. Its third session made accuracy worse, which the same evaluation caught, and the next two fixed it. Where the build departed from the original spec, [docs/decisions.md](docs/decisions.md) says why.
 

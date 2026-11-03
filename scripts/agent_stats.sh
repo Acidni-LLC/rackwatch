@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# Counts commits and lines by the Agent: trailer, for the README (DESIGN.md §16).
+# Counts commits and lines by the Agent: line in each commit message, for the README (DESIGN.md §16).
 set -euo pipefail
 
 for agent in "muse-code"; do
-  commits=$(git log --no-merges --format='%H%x09%(trailers:key=Agent,valueonly,separator=%x20)' | awk -F'\t' -v a="$agent" 'index($2, a) == 1 { print $1 }')
+  commits=$(git log --no-merges --format=%H | while read -r sha; do
+    git log -1 --format=%B "$sha" | grep -q "^Agent: $agent" && echo "$sha"
+  done)
   count=$(printf '%s\n' "$commits" | sed '/^$/d' | wc -l | tr -d ' ')
   added=0
   removed=0
