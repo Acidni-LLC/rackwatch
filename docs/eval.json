@@ -136,68 +136,77 @@
     "n": 5,
     "of": 14,
     "devices_range": [
-      9,
+      11,
       14
     ],
     "serials_range": [
-      7,
+      10,
       12
     ],
     "u_range": [
-      9,
+      11,
       14
+    ],
+    "span_range": [
+      9,
+      12
     ],
     "boxed_range": [
-      9,
+      11,
       14
     ],
-    "seconds_mean": 171.0,
-    "cost_mean_usd": 0.0733,
+    "seconds_mean": 138.1,
+    "cost_mean_usd": 0.0734,
     "runs": [
       {
-        "devices": 10,
-        "serials": 8,
-        "u": 10,
+        "devices": 14,
+        "serials": 11,
+        "u": 14,
+        "span": 12,
         "boxed": 14,
-        "needs_review": 13,
-        "seconds": 150.8,
-        "cost_usd": 0.0733
+        "needs_review": 4,
+        "seconds": 101.8,
+        "cost_usd": 0.0637
       },
       {
-        "devices": 9,
-        "serials": 7,
-        "u": 9,
-        "boxed": 9,
-        "needs_review": 9,
-        "seconds": 171.8,
+        "devices": 14,
+        "serials": 12,
+        "u": 14,
+        "span": 11,
+        "boxed": 14,
+        "needs_review": 4,
+        "seconds": 224.1,
+        "cost_usd": 0.0743
+      },
+      {
+        "devices": 11,
+        "serials": 10,
+        "u": 11,
+        "span": 9,
+        "boxed": 11,
+        "needs_review": 4,
+        "seconds": 124.2,
+        "cost_usd": 0.0809
+      },
+      {
+        "devices": 12,
+        "serials": 10,
+        "u": 12,
+        "span": 12,
+        "boxed": 14,
+        "needs_review": 7,
+        "seconds": 124.0,
         "cost_usd": 0.0727
-      },
-      {
-        "devices": 14,
-        "serials": 12,
-        "u": 14,
-        "boxed": 14,
-        "needs_review": 13,
-        "seconds": 151.2,
-        "cost_usd": 0.0676
-      },
-      {
-        "devices": 14,
-        "serials": 12,
-        "u": 14,
-        "boxed": 14,
-        "needs_review": 13,
-        "seconds": 197.4,
-        "cost_usd": 0.0772
       },
       {
         "devices": 14,
         "serials": 11,
         "u": 14,
+        "span": 11,
         "boxed": 14,
-        "needs_review": 14,
-        "seconds": 183.8,
-        "cost_usd": 0.0757
+        "needs_review": 4,
+        "seconds": 116.5,
+        "cost_usd": 0.0755
       }
     ]
   },

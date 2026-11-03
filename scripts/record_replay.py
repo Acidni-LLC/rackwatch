@@ -45,7 +45,7 @@ def fresh(settings, name: str):
     return run_settings, conn
 
 
-def record_vision(settings, tries: int, min_devices: int) -> None:
+def record_vision(settings, tries: int, min_devices: int, min_span: int = 0) -> None:
     """Scans vary between runs (docs/eval.json has the range). Keeps the first take that meets the bar, and records
     how many takes that needed in meta.json, so the shipped replay is never mistaken for the average."""
     from app.rack import span_matched  # noqa: PLC0415
@@ -70,7 +70,7 @@ def record_vision(settings, tries: int, min_devices: int) -> None:
         accuracy = scan.accuracy or {}
         accuracy["span_matched"] = span_matched(scan.devices, run_settings.generated_dir / "cmdb_seed.json")
         print(f"take {take}: {accuracy}", flush=True)
-        if accuracy.get("devices_matched", 0) >= min_devices:
+        if accuracy.get("devices_matched", 0) >= min_devices and accuracy["span_matched"] >= min_span:
             meta = {
                 "kind": "vision",
                 "recorded_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
@@ -83,7 +83,7 @@ def record_vision(settings, tries: int, min_devices: int) -> None:
             client.writer.write_meta(meta)
             print(json.dumps(meta, indent=2))
             return
-    raise SystemExit(f"no take reached {min_devices} devices in {tries} tries")
+    raise SystemExit(f"no take reached {min_devices} devices and {min_span} spans in {tries} tries")
 
 
 def record_triage(settings, tries: int) -> None:
@@ -162,13 +162,14 @@ def main() -> None:
     parser.add_argument("what", choices=["vision", "triage", "voice", "open"])
     parser.add_argument("--tries", type=int, default=4)
     parser.add_argument("--min-devices", type=int, default=13)
+    parser.add_argument("--min-span", type=int, default=0)
     parser.add_argument("--wav", default=str(ROOT / "data/voice/sample_note.wav"))
     args = parser.parse_args()
     settings = get_settings()
     if not settings.api_key:
         raise SystemExit("recording needs MODEL_API_KEY")
     if args.what == "vision":
-        record_vision(settings, args.tries, args.min_devices)
+        record_vision(settings, args.tries, args.min_devices, args.min_span)
     elif args.what == "triage":
         record_triage(settings, args.tries)
     elif args.what == "open":
