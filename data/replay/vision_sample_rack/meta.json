@@ -1,16 +1,17 @@
 {
   "kind": "vision",
-  "recorded_at": "2026-11-02T18:25:32-0500",
-  "takes": 4,
-  "seconds": 136.0,
-  "cost_usd": 0.066648,
+  "recorded_at": "2026-11-02T19:15:40-0500",
+  "takes": 2,
+  "seconds": 110.8,
+  "cost_usd": 0.059718,
   "accuracy": {
     "devices_matched": 14,
     "devices_total": 14,
     "serial_matched": 12,
     "u_matched": 14,
     "extra_devices": [],
-    "missing_devices": []
+    "missing_devices": [],
+    "span_matched": 13
   },
   "devices": 14
 }
