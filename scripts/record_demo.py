@@ -36,6 +36,7 @@ def main() -> None:
     parser.add_argument("--out", default="demo-out")
     parser.add_argument("--channel", default="msedge", help="installed browser: msedge or chrome")
     parser.add_argument("--speed", default="4", help="vision replay speed")
+    parser.add_argument("--replay", default="Replay recorded run", help="which triage replay button to click")
     args = parser.parse_args()
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -71,7 +72,7 @@ def main() -> None:
 
         # Triage: rejection, re-plan, verified. Replay speed is the Alerts page default of 4x.
         mark("triage")
-        page.get_by_role("button", name="Replay recorded run").click()
+        page.get_by_role("button", name=args.replay).click()
         page.wait_for_url("**/#/run/**")
         page.wait_for_selector("text=Waiting for your approval", timeout=120_000)
         page.wait_for_timeout(3500)

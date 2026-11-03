@@ -3,6 +3,12 @@ import type { CallRecord, Status } from "../api";
 import { clock, compact, get, usd } from "../api";
 import { BudgetBar } from "../components/CallLog";
 
+// Endpoints are "/v1/..." on the Meta API and "partner:/v1/..." through an inference partner.
+function servedBy(endpoint: string): string {
+  const [partner, path] = endpoint.split(":");
+  return path ? partner[0].toUpperCase() + partner.slice(1) : "Meta API";
+}
+
 // Every model request this install has made, with no keys and no prompts stored.
 export default function Calls({ status }: { status: Status | null }) {
   const [calls, setCalls] = useState<CallRecord[]>([]);
@@ -25,7 +31,7 @@ export default function Calls({ status }: { status: Status | null }) {
         <table className="w-full border-collapse text-left font-mono text-[12px]">
           <thead className="sticky top-0 bg-panel text-[11px] tracking-wider text-faint uppercase">
             <tr>
-              {["Time", "Model", "Purpose", "Effort", "In", "Cached", "Out", "Latency", "Cost", "Status"].map((h) => (
+              {["Time", "Model", "Served by", "Purpose", "Effort", "In", "Cached", "Out", "Latency", "Cost", "Status"].map((h) => (
                 <th key={h} className="border-b border-seam px-2 py-1.5 font-normal">
                   {h}
                 </th>
@@ -38,6 +44,7 @@ export default function Calls({ status }: { status: Status | null }) {
                 <tr className="cursor-pointer border-b border-seam/40 hover:bg-raised" onClick={() => setOpen(open === c.id ? null : c.id)}>
                   <td className="px-2 py-1 text-dim">{clock(c.ts)}</td>
                   <td className="px-2 py-1">{c.model}</td>
+                  <td className="px-2 py-1 text-dim">{servedBy(c.endpoint)}</td>
                   <td className="px-2 py-1">{c.purpose}</td>
                   <td className="px-2 py-1 text-amber">{c.effort ?? "–"}</td>
                   <td className="px-2 py-1">{compact(c.tokens_in)}</td>
@@ -52,7 +59,7 @@ export default function Calls({ status }: { status: Status | null }) {
                 </tr>
                 {open === c.id ? (
                   <tr>
-                    <td colSpan={10} className="bg-black px-3 py-2 whitespace-pre-wrap text-dim">
+                    <td colSpan={11} className="bg-black px-3 py-2 whitespace-pre-wrap text-dim">
                       {c.response_excerpt || "(no text)"}
                     </td>
                   </tr>
