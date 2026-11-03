@@ -33,7 +33,7 @@ Run it live or use Replay. Replay shows real recorded calls, and the screen labe
 - **1:55–2:15, the voice note.** Open the switch incident. Click a citation to show the real log line. Record the note, and it lands in the ticket.
 - **2:15–2:35, the human.** Approve, then open the plain-English client email and the export. Point out that nothing goes out without a person.
 - **2:35–2:50, the numbers.** Metrics tab. "Every model call is Meta's, and here's the log." For the bonus, add: "On Meta's open weights it passes the same verifier, at $0.18 a run instead of $0.30."
-- **2:50–3:00, the close.** "No key? Click Replay. github.com/<user>/rackwatch."
+- **2:50–3:00, the close.** "No key? Click Replay. github.com/Acidni-LLC/rackwatch."
 
 ## Project description
 RackWatch turns a photo of a server rack into a live asset inventory, then uses that inventory to triage alert storms. SAM (Segment Anything Model) 3.1 and Muse Spark find each device and read make, model, serial and rack position into a CMDB (configuration management database). When hundreds of alerts hit at 2 AM, a Muse Spark agent investigates with tools (CMDB, log search, simulated ping and DNS, a knowledge base) over data scrubbed of PII (personally identifiable information), and collapses the flood into a few incidents whose root causes cite exact log lines. A deterministic verifier the agent can't influence checks every claim, the grouping, and that the fix is approved, and it forces a re-plan if anything fails. A person approves the ticket and client email, and techs add voice notes transcribed by Muse Voice Transcribe.
