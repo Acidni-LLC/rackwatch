@@ -4,14 +4,19 @@
 returns a validated ``RackScanResult``. Flow: SAM sticker pass (one tight box
 per asset sticker) seeding per-row SAM box prompts, with the §8.1 concept
 prompt and Spark-grounding + SAM box-prompt fallback when the rack carries no
-stickers; sticker containment, NMS and overlap resolve; rail-anchored frame
-call; batched label reads; one robust rail line fit from all rail reads so a
-single bad read cannot shift a device; at most one batch of high-effort
-re-reads for fit-doubtful or serial-less crops; U assignment from the single
-line (half-coverage per unit); implausible boxes take their span from their
-own label read; decided bboxes snap to the fitted grid inside the rails
+stickers; inter-row and rail-edge gap seeds plus a last-resort row fallback
+(and a box-gap second SAM chance on the stickerless path) so a scan never
+silently loses devices; sticker containment, NMS and overlap resolve;
+rail-anchored frame call; batched label reads; one robust rail line fit from
+all rail reads so a single bad read cannot shift a device; at most one batch
+of high-effort re-reads for fit-doubtful or serial-less crops; U assignment
+from the single line (half-coverage per unit); agreeing label+height reads
+overrule a loose edge device-locally; implausible boxes take their span from
+their own label read; decided bboxes snap to the fitted grid inside the rails
 (SAM still finds the devices, the boxes are only snapped afterwards);
-overlay; optional accuracy diff against ``cmdb_seed.json``.
+per-device review flags only (label/span conflict, missing/invalid required
+field, globally bad fit); overlay; optional accuracy diff against
+``cmdb_seed.json``.
 """
 
 from __future__ import annotations
@@ -44,18 +49,22 @@ from vision.railfit import (
     frame_fit,
     label_pairs,
     snap_box,
+    unit_coverage,
 )
 from vision.sam import (
     MIN_STICKER_ROWS,
     SAM_MAX_OBJECTS,
     attribute_to_seeds,
+    box_gap_seeds,
     box_prompt_input,
     cluster_rows,
     concept_input,
     contains,
+    edge_gap_seeds,
     fallback_row_boxes,
     filter_narrow,
     gap_seed_boxes,
+    iou,
     keep_sticker_boxes,
     nms,
     nms_with_flags,
@@ -95,7 +104,8 @@ def segment_devices(client: Any, image_url: str, image_w: int, image_h: int,
                     total_u: int, rail_left_px: float | None = None,
                     rail_right_px: float | None = None) -> tuple[list, list[str], list[bool]]:
     """Sticker rows seed tight SAM prompts; wide inter-row gaps get seeds too
-    in case a sticker was missed. Multi-row boxes are split, same-sticker
+    in case a sticker was missed, as do the rail-to-outer-row edges.
+    Multi-row boxes are split, same-sticker
     splits merged, stickerless row boxes dropped. Rows the segmenter still
     misses get a last-resort fallback box, so a scan never silently loses a
     stickered device. Returns (boxes, call_ids, is_gap), sorted top-to-bottom
@@ -113,14 +123,23 @@ def segment_devices(client: Any, image_url: str, image_w: int, image_h: int,
         row_seeds = row_seed_boxes(rows, image_w, image_h)
         gap_seeds = gap_seed_boxes(rows, image_w, image_h, rail_top_px, rail_bottom_px,
                                    total_u, max_seeds=max(0, SAM_MAX_OBJECTS - len(row_seeds)))
-        seeds = row_seeds + gap_seeds
+        row_cys = [sum((b[1] + b[3]) / 2 for b in row) / len(row) for row in rows]
+        edge_seeds = edge_gap_seeds(row_cys, image_w, image_h, rail_top_px, rail_bottom_px,
+                                    total_u, max_seeds=max(0, SAM_MAX_OBJECTS - len(row_seeds)
+                                                           - len(gap_seeds)))
+        seeds = row_seeds + gap_seeds + edge_seeds
+        seed_flags = [False] * len(row_seeds) + [True] * (len(gap_seeds) + len(edge_seeds))
         seed_cys = [_row_centroid([s])[1] for s in seeds]
         boxes = _sam_boxes(client, image_url, image_w, image_h, seeds, calls)
-        boxes, is_gap = attribute_to_seeds(boxes, seed_cys,
-                                           [False] * len(row_seeds) + [True] * len(gap_seeds))
+        boxes, is_gap = attribute_to_seeds(boxes, seed_cys, seed_flags)
         boxes = split_multi_row_boxes(boxes, rows)
-        boxes, is_gap = attribute_to_seeds(boxes, seed_cys,
-                                           [False] * len(row_seeds) + [True] * len(gap_seeds))
+        boxes, is_gap = attribute_to_seeds(boxes, seed_cys, seed_flags)
+        # A box holding a sticker center belongs to that row even when a gap
+        # or edge seed was nearer: without this, a seed near a row steals the
+        # row's box and the split halves never merge back.
+        centers = [((s[0] + s[2]) / 2, (s[1] + s[3]) / 2) for s in flat]
+        is_gap = [gap and not any(contains(box, x, y) for x, y in centers)
+                  for box, gap in zip(boxes, is_gap, strict=True)]
         row_boxes = union_by_sticker(
             keep_sticker_boxes([b for b, g in zip(boxes, is_gap, strict=True) if not g],
                                flat),
@@ -144,7 +163,30 @@ def segment_devices(client: Any, image_url: str, image_w: int, image_h: int,
         boxes = filter_narrow(_grounded_boxes(client, image_url, image_w, image_h, calls),
                               image_w)
     boxes = nms(boxes)
-    return boxes, calls, [False] * len(boxes)
+    return _fill_box_gaps(client, image_url, image_w, image_h, boxes, calls,
+                           rail_top_px, rail_bottom_px, total_u)
+
+
+def _fill_box_gaps(client: Any, image_url: str, image_w: int, image_h: int,
+                   boxes: list, calls: list[str],
+                   rail_top_px: float, rail_bottom_px: float,
+                   total_u: int) -> tuple[list, list[str], list[bool]]:
+    """Second SAM chance for the stickerless path: seed wide inter-box gaps
+    (and rail edges) so a short grounding list cannot silently lose devices.
+    Fresh boxes are gap-flagged, so unreadable ones die after the label read;
+    boxes overlapping an existing one are dropped outright. Sorted
+    top-to-bottom to match the sticker path's contract."""
+    seeds = box_gap_seeds(boxes, image_w, image_h, rail_top_px, rail_bottom_px,
+                          total_u)
+    if not seeds:
+        order = sorted(range(len(boxes)), key=lambda i: (boxes[i][1], boxes[i][0]))
+        return [boxes[i] for i in order], calls, [False] * len(boxes)
+    fresh = [b for b in _sam_boxes(client, image_url, image_w, image_h, seeds, calls)
+             if all(iou(b, e) <= 0.5 for e in boxes)]
+    out = boxes + fresh
+    flags = [False] * len(boxes) + [True] * len(fresh)
+    order = sorted(range(len(out)), key=lambda i: (out[i][1], out[i][0]))
+    return [out[i] for i in order], calls, [flags[i] for i in order]
 
 
 def _grounded_boxes(client: Any, image_url: str, image_w: int, image_h: int,
@@ -152,7 +194,7 @@ def _grounded_boxes(client: Any, image_url: str, image_w: int, image_h: int,
     grounded, grounding_calls = ground_devices(client, image_url, image_w, image_h)
     calls.extend(grounding_calls)
     if not grounded:
-        return []
+        return []  # no hints: skip the empty box prompt, the gap fill seeds the rails
     return _sam_boxes(client, image_url, image_w, image_h, grounded, calls)
 
 
@@ -301,6 +343,30 @@ def _clamp_box(box: list, rails_x: tuple[float, float] | None,
     return [int(round(x1)), int(round(y1)), int(round(x2)), int(round(y2))]
 
 
+def _reconcile_span(fit: Fit, box: list, fit_span: tuple[int, int],
+                   u_label: int, height: int,
+                   total_u: int) -> tuple[tuple[int, int], bool] | None:
+    """Let agreeing reads overrule a loose box edge, device-locally: the fit
+    (and every other device) is untouched. Returns (span, conflict) or None to
+    keep the fit span. A same-size span shifted by one row trusts the
+    label+height pair but stays flagged (box and reads conflicted). A span
+    narrower than label+height grows upward when the label already sits inside
+    it and the box visibly reaches every missing unit: reads and box agree,
+    so no new flag. Anything else keeps the fit span with its mismatch flag."""
+    expected = (u_label, min(total_u, u_label + height - 1))
+    if expected == fit_span:
+        return None
+    if (fit_span[1] - fit_span[0]) == (expected[1] - expected[0]) and abs(
+            fit_span[0] - expected[0]) <= 1:
+        return expected, True
+    if (fit_span[1] - fit_span[0] + 1) < height and fit_span[0] <= u_label <= fit_span[1]:
+        missing = [u for u in range(expected[0], expected[1] + 1)
+                   if not fit_span[0] <= u <= fit_span[1]]
+        if all(unit_coverage(fit, box[1], box[3], u) > 0.1 for u in missing):
+            return expected, False
+    return None
+
+
 def build_devices(rack_id: str, image_path: str, boxes: list, frame: dict,
                   reads: dict[str, dict], image_h: int, fit: Fit | None = None,
                   image_w: int | None = None) -> list[Device]:
@@ -310,10 +376,16 @@ def build_devices(rack_id: str, image_path: str, boxes: list, frame: dict,
     crossing a rail line by a sliver adds no U. Without a fit the frame rails
     serve as the line. A box the segmenter got plainly wrong (past the frame
     or far taller than its neighbors) takes its span from its own u_label
-    read instead and is flagged. Decided boxes are snapped to the grid: y
-    from the fitted line, x across the rail interior. A box whose U
-    disagrees with its label keeps its SAM box (clamped inside the frame) so
-    a wrong U stays visibly wrong."""
+    read instead; that override flags only when the fit span disagreed with
+    the reads, since a corroborated span is certain even from an ugly box.
+    A plausible box overruled by agreeing label+height reads is reconciled the
+    same way (shift-by-one trusted but flagged, grow-up unflagged). A device
+    is flagged for its own reason only: label/span conflict, implausible box
+    overruled against the fit, a missing/invalid required field, or a
+    globally bad fit. Decided boxes are snapped to the grid: y from the
+    fitted line, x across the rail interior. A box whose U disagrees with its
+    label keeps its SAM box (clamped inside the frame) so a wrong U stays
+    visibly wrong."""
     total_u = int(frame.get("total_u") or 42)
     if fit is None:
         top, bottom = rail_edges_px(frame, image_h)
@@ -327,22 +399,31 @@ def build_devices(rack_id: str, image_path: str, boxes: list, frame: dict,
     devices: list[Device] = []
     for i, box in enumerate(boxes):
         item = reads.get(f"b{i}", {})
-        u_start, u_end = assign_units(fit, box[1], box[3])
+        fit_span = assign_units(fit, box[1], box[3])
         u_label = _int_or_none(item.get("u_label"))
+        height = _valid_height(item.get("u_height"))
         implausible = is_implausible_box(box, fit, median_h, rails_x,
                                          rail_top, rail_bottom)
-        disagrees = u_label is not None and (u_label < u_start or u_label > u_end)
-        needs_review = fit.large_residuals
+        span, conflict = fit_span, False
         if implausible and u_label is not None and 1 <= u_label <= total_u:
-            height = _valid_height(item.get("u_height")) or 1
-            u_start, u_end = u_label, min(total_u, u_label + height - 1)
-            disagrees = False
-            needs_review = True
-        elif implausible or disagrees:
-            needs_review = True
+            span = (u_label, min(total_u, u_label + (height or 1) - 1))
+            conflict = span != fit_span
+        elif (not implausible and u_label is not None and height is not None
+                and 1 <= u_label <= total_u):
+            reconciled = _reconcile_span(fit, box, fit_span, u_label, height,
+                                         total_u)
+            if reconciled is not None:
+                span, conflict = reconciled
+            else:
+                conflict = u_label < fit_span[0] or u_label > fit_span[1]
+        elif implausible or (u_label is not None
+                             and (u_label < fit_span[0] or u_label > fit_span[1])):
+            conflict = True
+        u_start, u_end = span
+        needs_review = fit.large_residuals or conflict
         out_box: list = list(box)
         if rails_x is not None and image_w:
-            if disagrees:
+            if conflict and span == fit_span:
                 out_box = _clamp_box(box, rails_x, rail_top, rail_bottom,
                                      image_w, image_h)
             else:

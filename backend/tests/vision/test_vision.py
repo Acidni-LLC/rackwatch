@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -38,13 +39,16 @@ from vision.railfit import (  # noqa: E402
     snap_box,
     theil_sen,
     unit_at,
+    unit_coverage,
 )
 from vision.sam import (  # noqa: E402
     MIN_STICKER_ROWS,
     SAM_MAX_OBJECTS,
     attribute_to_seeds,
+    box_gap_seeds,
     box_prompt_text,
     cluster_rows,
+    edge_gap_seeds,
     fallback_row_boxes,
     filter_narrow,
     gap_seed_boxes,
@@ -437,12 +441,14 @@ def test_pipeline_name_plate_excluded_and_fallback(tmp_path):
         fake_text(frame_text(top=20)),  # rail starts below the plate
         fake_sam(stickers, W, H),
         fake_sam(boxes, W, H),  # concept fallback: a stickerless rack
+        fake_sam([], W, H),  # gap fill: nothing hiding between the boxes
         fake_text(label_text([entry(f"b{i}", u=40 - i * 7) for i in range(4)])),
     ])
     result = run_rack_pipeline(image, client, overlay_path=str(tmp_path / "ov.png"))
     assert len(result.devices) == 4
     purposes = [r["purpose"] for r in client.requests]
-    assert purposes == ["rack_frame", "sam_segment", "sam_segment", "label_read"]
+    assert purposes == ["rack_frame", "sam_segment", "sam_segment", "sam_segment",
+                        "label_read"]
 
 
 def test_pipeline_fallback_grounding_then_box_prompt(tmp_path):
@@ -454,13 +460,14 @@ def test_pipeline_fallback_grounding_then_box_prompt(tmp_path):
         fake_sam([], W, H),  # concept prompt finds nothing usable
         fake_text(grounding_text([ground_entry("g0", tight[0]), ground_entry("g1", tight[1])])),
         fake_sam(tight, W, H),
+        fake_sam([], W, H),  # gap fill between the far-apart boxes finds nothing
         fake_text(label_text([entry("b0", u=40), entry("b1", u=3)])),
     ])
     result = run_rack_pipeline(image, client, overlay_path=str(tmp_path / "ov.png"))
     assert len(result.devices) == 2
     purposes = [r["purpose"] for r in client.requests]
     assert purposes == ["rack_frame", "sam_segment", "sam_segment", "spark_grounding",
-                        "sam_segment", "label_read"]
+                        "sam_segment", "sam_segment", "label_read"]
     box_text = client.requests[4]["input"][0]["content"][0]["text"]
     assert box_text.startswith("<0f>0<|box;")
     assert "w=400;h=800" in box_text
@@ -477,6 +484,7 @@ def test_low_confidence_reread_at_high_effort(tmp_path):
         fake_text(frame_text()),
         fake_sam([], W, H),  # stickerless test rack -> concept path
         fake_sam(boxes, W, H),
+        fake_sam([], W, H),  # gap fill finds nothing new
         fake_text(label_text(weak)),
         fake_text(label_text([strong])),
     ])
@@ -508,6 +516,7 @@ def test_accuracy_diff(tmp_path):
         fake_text(frame_text()),
         fake_sam([], W, H),  # stickerless test rack -> concept path
         fake_sam(boxes, W, H),
+        fake_sam([], W, H),  # gap fill finds nothing new
         fake_text(label_text([entry(f"b{i}", u=u) for i, u in enumerate([12, 10, 40, 38])])),
     ])
     result = run_rack_pipeline(image, client, seed_path=str(seed_path),
@@ -641,3 +650,210 @@ def test_video_picks_sharpest_frame(tmp_path):
     frames = sample_video_frames(video, max_frames=8)
     assert len(frames) == 2
     assert select_sharpest_frame(frames) == 1
+
+
+def test_combine_confidence_type_aware():
+    pp = dict(entry("b0", u=42), device_type="patch_panel", make="PANDUIT",
+              model=None, serial=None, hostname="PP-01",
+              field_confidence={"make": 0.9, "hostname": 0.9, "u": 0.9})
+    assert combine_confidence(pp) >= 0.6  # no plate to read: correct, not uncertain
+    sw = dict(entry("b0"), model=None,
+              field_confidence={"make": 0.9, "serial": 0.9, "hostname": 0.9, "u": 0.9})
+    assert combine_confidence(sw) >= 0.6  # model is informational, never required
+    noser = dict(entry("b0"), serial=None,
+                 field_confidence={"make": 0.9, "model": 0.9, "hostname": 0.9,
+                                   "u": 0.9})
+    assert combine_confidence(noser) == 0.3  # a switch should have a serial
+    nohost = dict(entry("b0"), hostname=None,
+                  field_confidence={"make": 0.9, "serial": 0.9, "u": 0.9})
+    assert combine_confidence(nohost) == 0.3  # identity missing
+    blank = {"crop_id": "b0", "device_type": "blank", "u_label": 25, "u_height": 1,
+             "field_confidence": {"u": 0.9}}
+    assert combine_confidence(blank) >= 0.6  # a blank needs no fields at all
+    assert combine_confidence({}) == 0.0
+
+
+def exact_1u_box(u: int, h: int = H) -> tuple[int, int, int, int]:
+    unit = h / 42
+    return (100, int(h - u * unit), 300, int(h - (u - 1) * unit))
+
+
+def test_fit_rail_bad_fit_threshold():
+    uh = 800.0 / 42
+    xs = [41, 40, 39, 38, 37]
+    loose = [(x, 800.0 - uh * x + e * uh)
+             for x, e in zip(xs, [0.4, -0.4, 0.4, -0.4, 0.0], strict=True)]
+    fit = fit_rail(loose, 42, frame=(0.0, 800.0))
+    assert fit is not None and not fit.large_residuals  # ordinary loose edges
+    bad = [(x, 800.0 - uh * x + e * uh)
+           for x, e in zip(xs, [1.2, -1.2, 1.2, -1.2, 0.0], strict=True)]
+    fit_bad = fit_rail(bad, 42, frame=(0.0, 800.0))
+    assert fit_bad is not None and fit_bad.large_residuals  # typically a unit off
+
+
+def test_build_devices_agreeing_scan_unflagged():
+    unit = 800 / 42
+    fit = Fit(a=800.0, b=-unit, total_u=42, n_pairs=8, n_inliers=8,
+              mad_u=0.2, source="labels", large_residuals=False)
+    frame = frame_with_rails()
+    boxes = [exact_1u_box(42), exact_1u_box(38), exact_1u_box(12)]
+    reads = {
+        "b0": dict(entry("b0", u=42), device_type="patch_panel", make="PANDUIT",
+                   model=None, serial=None, hostname="PP-01",
+                   field_confidence={"make": 0.9, "hostname": 0.9, "u": 0.9}),
+        "b1": dict(entry("b1", u=38), hostname="SW-ACC-01", model=None,
+                   field_confidence={"make": 0.9, "serial": 0.9, "hostname": 0.9,
+                                     "u": 0.9}),
+        "b2": entry("b2", u=12),
+    }
+    devices = build_devices("RACK-A", "img.jpg", boxes, frame, reads, H, fit, W)
+    assert [(d.u_start, d.u_end) for d in devices] == [(42, 42), (38, 38), (12, 12)]
+    assert [d.needs_review for d in devices] == [False, False, False]
+
+
+def test_reconcile_shift_by_one_trusted_flagged():
+    unit = 800 / 42
+    fit = Fit(a=800.0, b=-unit, total_u=42, n_pairs=8, n_inliers=8,
+              mad_u=0.2, source="labels", large_residuals=False)
+    frame = frame_with_rails()
+    devices = build_devices("RACK-A", "img.jpg", [exact_1u_box(41)], frame,
+                            {"b0": entry("b0", u=42)}, H, fit, W)
+    assert devices[0].u_start == 42  # agreeing reads overrule the loose edge
+    assert devices[0].needs_review  # box and reads conflicted
+    top42, bot42 = int(800 - 42 * unit), int(800 - 41 * unit)
+    kept = (devices[0].bbox.x1, devices[0].bbox.y1,
+            devices[0].bbox.x2, devices[0].bbox.y2)
+    assert kept == (80, top42, 320, bot42)  # snapped to the trusted span
+
+
+def test_reconcile_grows_up_when_reads_agree():
+    unit = 800 / 42
+    fit = Fit(a=800.0, b=-unit, total_u=42, n_pairs=8, n_inliers=8,
+              mad_u=0.2, source="labels", large_residuals=False)
+    frame = frame_with_rails()
+    top20, bot20 = int(800 - 20 * unit), int(800 - 19 * unit)
+    box = (100, top20 - int(0.3 * unit), 300, bot20 + int(0.3 * unit))
+    assert assign_units(fit, box[1], box[3]) == (20, 20)  # unit 21 lost on coverage
+    devices = build_devices("RACK-A", "img.jpg", [box], frame,
+                            {"b0": entry("b0", u=20, u_height=2)}, H, fit, W)
+    assert (devices[0].u_start, devices[0].u_end) == (20, 21)
+    assert not devices[0].needs_review  # label, height and box bottom agree
+
+
+def test_reconcile_never_shrinks():
+    unit = 800 / 42
+    fit = Fit(a=800.0, b=-unit, total_u=42, n_pairs=8, n_inliers=8,
+              mad_u=0.2, source="labels", large_residuals=False)
+    frame = frame_with_rails()
+    top31, bot30 = int(800 - 31 * unit), int(800 - 29 * unit)
+    devices = build_devices("RACK-A", "img.jpg", [(100, top31, 300, bot30)], frame,
+                            {"b0": entry("b0", u=30, u_height=1)}, H, fit, W)
+    assert (devices[0].u_start, devices[0].u_end) == (30, 31)  # box keeps its unit
+    assert not devices[0].needs_review
+
+
+def test_implausible_corroborated_span_unflagged():
+    unit = 800 / 42
+    fit = Fit(a=800.0, b=-unit, total_u=42, n_pairs=8, n_inliers=8,
+              mad_u=0.2, source="labels", large_residuals=False)
+    frame = frame_with_rails()
+    top31, bot30 = int(800 - 31 * unit), int(800 - 29 * unit)
+    wide = (0, top31, 399, bot30)  # past the rails, but the span is certain
+    assert is_implausible_box(wide, fit, 1.0, rail_x_px(frame, W), 0.0, 800.0)
+    devices = build_devices("RACK-A", "img.jpg", [wide], frame,
+                            {"b0": entry("b0", u=30, u_height=2)}, H, fit, W)
+    assert (devices[0].u_start, devices[0].u_end) == (30, 31)
+    assert not devices[0].needs_review  # fit and reads agree despite the box
+
+
+def test_unit_coverage():
+    unit = 800 / 42
+    fit = Fit(a=800.0, b=-unit, total_u=42, n_pairs=5, n_inliers=5,
+              mad_u=0.0, source="labels", large_residuals=False)
+    top12, bot12 = int(800 - 12 * unit), int(800 - 11 * unit)
+    assert unit_coverage(fit, top12, bot12, 12) == pytest.approx(1.0, abs=0.05)
+    assert unit_coverage(fit, top12, bot12, 11) == 0.0
+
+
+def test_gap_seed_helpers():
+    uh = 800.0 / 42
+    seeds = edge_gap_seeds([400.0], W, H, 0.0, 800.0, 42)
+    assert seeds  # both rail edges are far from the single row
+    assert min(s[1] for s in seeds) < 400 - uh
+    assert max(s[3] for s in seeds) > 400 + uh
+    for s in seeds:  # every seed stays a full unit clear of the row
+        assert s[3] < 400 - uh or s[1] > 400 + uh
+    assert edge_gap_seeds([30.0, 770.0], W, H, 0.0, 800.0, 42) == []
+    assert edge_gap_seeds([], W, H, 0.0, 800.0, 42) == []
+    full_rail = box_gap_seeds([], W, H, 0.0, 800.0, 42)
+    assert 0 < len(full_rail) <= SAM_MAX_OBJECTS  # empty scan still seeds the rails
+    assert full_rail == sorted(full_rail, key=lambda b: (b[1], b[0]))
+    assert box_gap_seeds([(10, 0, 390, 800)], W, H, 0.0, 800.0, 42) == []
+    two = [(10, 0, 390, 100), (10, 700, 390, 800)]
+    mid = box_gap_seeds(two, W, H, 0.0, 800.0, 42)
+    assert len(mid) >= 2  # a wide gap gets spread seeds, not one box
+    assert all(100 < (s[1] + s[3]) / 2 < 700 for s in mid)
+
+
+def test_pipeline_grounding_gap_fill_rescues(tmp_path):
+    image = make_image(tmp_path / "rack.jpg")
+    tight = [(20, 16, 380, 96), (20, 680, 380, 776)]
+    mid_box = (20, 380, 380, 420)
+    client = FakeMetaClient(script=[
+        fake_text(frame_text()),
+        fake_sam([], W, H),  # no stickers on this rack
+        fake_sam([], W, H),  # concept prompt finds nothing usable
+        fake_text(grounding_text([ground_entry("g0", tight[0]), ground_entry("g1", tight[1])])),
+        fake_sam(tight, W, H),
+        fake_sam([mid_box], W, H),  # gap fill finds the middle device
+        fake_text(label_text([entry("b0", u=40),
+                              dict(entry("b1", u=21), hostname="MID-01"),
+                              entry("b2", u=3)])),
+    # reads key to sorted-box order: tight, mid, tight
+    ])
+    result = run_rack_pipeline(image, client, overlay_path=str(tmp_path / "ov.png"))
+    assert len(result.devices) == 3
+    assert "MID-01" in [d.hostname for d in result.devices]
+    purposes = [r["purpose"] for r in client.requests]
+    assert purposes == ["rack_frame", "sam_segment", "sam_segment", "spark_grounding",
+                        "sam_segment", "sam_segment", "label_read"]
+
+
+def test_pipeline_empty_grounding_seeds_rails(tmp_path):
+    image = make_image(tmp_path / "rack.jpg")
+    box = (20, 380, 380, 420)
+    client = FakeMetaClient(script=[
+        fake_text(frame_text()),
+        fake_sam([], W, H),  # no stickers on this rack
+        fake_sam([], W, H),  # concept prompt finds nothing usable
+        fake_text(json.dumps({"devices": []})),  # grounding list is empty too
+        fake_sam([box], W, H),  # rail-span seeds still find the device
+        fake_text(label_text([dict(entry("b0", u=21), hostname="MID-01")])),
+    ])
+    result = run_rack_pipeline(image, client, overlay_path=str(tmp_path / "ov.png"))
+    assert len(result.devices) == 1
+    assert result.devices[0].hostname == "MID-01"
+    purposes = [r["purpose"] for r in client.requests]
+    assert purposes == ["rack_frame", "sam_segment", "sam_segment", "spark_grounding",
+                        "sam_segment", "label_read"]
+
+
+def test_pipeline_sticker_path_edge_seeds(tmp_path):
+    image = make_image(tmp_path / "rack.jpg")
+    rows = [[(300, c - 10, 360, c + 10)] for c in (400, 500, 600, 700)]
+    stickers = [s for row in rows for s in row]
+    tight = [(10, c - 50, 390, c + 50) for c in (400, 500, 600, 700)]
+    bare = [dict(entry(f"b{i}"), u_label=None, u_height=None) for i in range(4)]
+    client = FakeMetaClient(script=[
+        fake_text(frame_text()),
+        fake_sam(stickers, W, H),
+        fake_sam(tight, W, H),
+        fake_text(label_text(bare)),
+    ])
+    result = run_rack_pipeline(image, client, overlay_path=str(tmp_path / "ov.png"))
+    assert len(result.devices) == 4
+    prompt = client.requests[2]["input"][0]["content"][0]["text"]
+    found = re.findall(r"<\|box;x1=(\d+);y1=(\d+);x2=(\d+);y2=(\d+)", prompt)
+    assert found  # the single box-prompt call carries row, gap and edge seeds
+    cys = [(int(y1) + int(y2)) / 2 for _, y1, _, y2 in found]
+    assert min(cys) < 350 and max(cys) > 750  # seeds reach past the outer rows
