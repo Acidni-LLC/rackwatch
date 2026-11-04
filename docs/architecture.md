@@ -65,7 +65,7 @@ On the seeded rack, the CMDB rows the agent reads are the seed (DESIGN.md §8.2)
 
 | Path | What |
 |---|---|
-| `backend/app/schemas.py` | The contract both agents coded to |
+| `backend/app/schemas.py` | The contract the app and the vision code share |
 | `backend/app/meta_client.py`, `budget.py`, `replay.py`, `pii.py` | The door, its guards, and the scrubber |
 | `backend/app/agent/` | Loop, tools, digest, selectors, effort router |
 | `backend/app/verifier/verify.py` | R1–R8 |

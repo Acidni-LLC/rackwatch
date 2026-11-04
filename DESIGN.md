@@ -316,7 +316,7 @@ Header: a mode pill (**LIVE** green / **REPLAY** grey) and a key status read fro
 2. `datagen/`: the scenario, generator, KB, ground truth, allow-list.
 It works in its own git worktree/branch `muse/vision-datagen` and merges via PR.
 
-**The integrator** owns everything else: repo setup, `schemas.py` (written **first** at M0 so both agents code to it), db, meta_client/budget/replay, pii, agent, verifier, voice, API, frontend, tests, docs.
+**The integrator** owns everything else: repo setup, `schemas.py` (written **first** at M0 so both sides code to it), db, meta_client/budget/replay, pii, agent, verifier, voice, API, frontend, tests, docs.
 
 ### Interface contracts (frozen at M0, changes need a note in both logs)
 ```python

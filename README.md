@@ -112,7 +112,7 @@ Costs are estimates from published prices and the usage each response reports. M
 `budget.py` refuses a call before it's made if its estimate would pass $1.50 for the run or $120 in total. Totals persist in the call log. Every call sets `max_output_tokens`. Prompt caching does much of the work here: in the shipped recording, 54% of input tokens were cached. Tests use a fake client and cost nothing.
 
 ## What Muse Code built
-Two agents built this, and the `Agent:` line in each commit says which did what. Muse Code (`Agent: muse-code muse-spark-1.3`) wrote `backend/vision/` and `datagen/` in 5 logged sessions. Run `scripts/agent_stats.sh` for commit and line counts.
+Muse Code wrote `backend/vision/` and `datagen/` in 5 logged sessions ([docs/muse-code-log.md](docs/muse-code-log.md)), and its commits carry `Agent: muse-code muse-spark-1.3`. Its work stops at those two packages. Run `scripts/agent_stats.sh` for its commit and line counts.
 
 The contract came first (`backend/app/schemas.py`), Muse Code coded to it, and live runs drove the rest: every session after its first was a bug report with measured numbers from the integrator. Its third session made accuracy worse, which the same evaluation caught, and the next two fixed it. Where the build departed from the original spec, [docs/decisions.md](docs/decisions.md) says why.
 
