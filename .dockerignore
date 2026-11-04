@@ -1,0 +1,11 @@
+.git
+.env
+.env.*
+.venv
+**/node_modules
+frontend/dist
+backend/tests
+data/runs
+data/uploads
+trajectory-*
+conversation-*
