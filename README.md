@@ -104,7 +104,7 @@ The verifier didn't care which model answered: Meta's open-weight model passed i
 | Time | 138 s mean, 102 s to 224 s, mostly API latency |
 | Estimated cost | $0.07 mean |
 
-The usual miss is a 2U server recorded as 1U. In the scan we checked row by row, all three wrong devices were flagged for review, plus one that was right. Scans vary, so report the range. The shipped replay is the first take that reached 14 devices and 12 whole spans, which is better than typical, and its `meta.json` records how many takes that took.
+The usual miss is a 2U server recorded as 1U. In the scan we checked row by row, all three wrong devices were flagged for review, plus one that was right. Scans vary, so report the range. The shipped replay is a good take, the second one recorded: 14 of 14 devices, 12 of 14 serials and 13 of 14 whole spans, which is above the range in the table. Its `meta.json` has the numbers.
 
 Costs are estimates from published prices and the usage each response reports. Meta and Baseten publish the same token prices for these models, so the cost difference comes from using fewer tokens, not from a cheaper rate.
 
