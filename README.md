@@ -23,7 +23,9 @@ MSPs (managed service providers) run IT for dozens of small clients with a few t
 Every runtime model call is Meta's, through one client, and the Call log screen shows all of them.
 
 ## Quick start
-You need Python 3.11+ and Node 20+.
+**No install:** [the hosted demo](https://ca-rackwatch-demo.mangograss-1e4cf20f.eastus2.azurecontainerapps.io) plays recorded runs in your browser. It holds no keys and makes no live model calls. Visitors share one copy, so you may see someone else's runs.
+
+**To run it yourself** you need Python 3.11+ and Node 20+.
 
 **No key: recorded runs**
 ```bash

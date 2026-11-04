@@ -9,7 +9,7 @@ From the [participant guide](https://cerebralvalley.ai/e/meta-ai-developer-hacka
 - The video is 3 minutes and shows only what was built during the event.
 - The repo is public and contains only event work. Everyone who worked on it is listed on the submission page.
 - Submit at [the event submission page](https://cerebralvalley.ai/e/meta-ai-developer-hackathon/hackathon/submit) by Wed Nov 4, 9:00 PM ET. Late entries don't count. Nov 3 is the last full day for submission questions.
-- Judges score the video, the code **and the live product** ("Does the product hold up live?"). A hosted replay link would help here.
+- Judges score the video, the code **and the live product** ("Does the product hold up live?"). The hosted replay demo for the form is https://ca-rackwatch-demo.mangograss-1e4cf20f.eastus2.azurecontainerapps.io
 - **Most Viral ($20,000):** post the demo on X and submit that post's link on the platform. Engagement counts through the end of Nov 8.
 - **Best Build on Meta Open Weight Models ($10,000):** requires Muse Glimmer or Muse Spark Open on your own hardware or partner inference, and the infrastructure partner verifies it. RackWatch runs its whole triage agent on Muse Spark Open through Baseten: 5 of 5 runs passed the verifier (`docs/eval.json`), and **Replay on open weights** shows a recorded run. We don't yet know how Baseten verifies usage.
 - **Best Agentic Use-Case ($5,000):** judged on autonomy, effectiveness and practical usefulness. Other bonuses: Community Vote $10,000, Best Creative Build $5,000.
