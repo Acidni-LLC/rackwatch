@@ -13,3 +13,9 @@ RackWatch © 2026 Jamieson Gill, MIT licensed (see LICENSE). Created Nov 2–4, 
 | AI | Artificial intelligence |
 | MIT | The MIT open source license, named for the Massachusetts Institute of Technology |
 | PII | Personally identifiable information |
+
+This license covers only the source code in this repository. Meta models
+(Muse Spark, SAM 3.1, Muse Voice Transcribe, Muse Glimmer), their weights, and
+the Meta Model API are NOT covered by this license; they are governed by Meta's
+own terms (Meta Model API terms and the Muse Model License).
+
